@@ -299,7 +299,7 @@ void main() {
         self.handle_input();
     }
 
-    pub fn vert_from_pixel_coords(&self, pixel: &PixelCoord) -> Vertex {
+    pub fn vert_from_pixel_coords(&self, pixel: &PixelCoord, color: [f32; 4]) -> Vertex {
         // to convert pixel to screen coordinate (-1..1), divide by resolution (-1..1) -> (0..1),
         // multiply by 2 (0..1) -> (0..2) and subtract 1 (0..2) -> (-1..1)
         let screen_x = (pixel.x as f32) / (self.dimensions[0] as f32) * 2.0 - 1.0;
@@ -307,7 +307,7 @@ void main() {
 
         Vertex {
             position: [screen_x, screen_y],
-            color: [1.0, 1.0, 1.0, 1.0],
+            color,
         }
     }
 
