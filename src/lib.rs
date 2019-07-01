@@ -36,7 +36,7 @@ type ConcreteGraphicsPipeline = GraphicsPipeline<
 
 pub struct App {
     instance: Arc<Instance>,
-    events_loop: EventsLoop,
+    pub events_loop: EventsLoop,
     surface: Arc<Surface<Window>>,
     physical_device_index: usize,
     device: Arc<Device>,
@@ -50,8 +50,10 @@ pub struct App {
     recreate_swapchain: bool,
     previous_frame_end: Box<GpuFuture>,
     pub done: bool,
+    pub dimensions: [u32; 2],
     vertex_buffers: Vec<Arc<VertexBuffer>>,
     frame_data: FrameData,
+    pub unprocessed_events: Vec<VirtualKeyCode>,
 }
 
 struct FrameData {
@@ -261,13 +263,19 @@ void main() {
             recreate_swapchain,
             previous_frame_end,
             done: false,
+            dimensions: [0, 0],
             vertex_buffers: vec![],
+            unprocessed_events: vec![],
             frame_data: FrameData {
                 image_num: None,
                 acquire_future: None,
                 command_buffer: None,
             },
         }
+    }
+
+    pub fn clear_vertex_buffers(&mut self) {
+        self.vertex_buffers = vec![];
     }
 
     pub fn new_vbuf_from_verts(&mut self, verts: &[Vertex]) {
@@ -282,12 +290,25 @@ void main() {
     }
 
     pub fn draw_frame(&mut self) {
+        self.clear_unprocessed_events();
         self.setup_frame();
 
         self.create_command_buffer();
         self.submit_and_check();
 
         self.handle_input();
+    }
+
+    pub fn vert_from_pixel_coords(&self, pixel: &PixelCoord) -> Vertex {
+        // to convert pixel to screen coordinate (-1..1), divide by resolution (-1..1) -> (0..1),
+        // multiply by 2 (0..1) -> (0..2) and subtract 1 (0..2) -> (-1..1)
+        let screen_x = (pixel.x as f32) / (self.dimensions[0] as f32) * 2.0 - 1.0;
+        let screen_y = (pixel.y as f32) / (self.dimensions[1] as f32) * 2.0 - 1.0;
+
+        Vertex {
+            position: [screen_x, screen_y],
+            color: [1.0, 1.0, 1.0, 1.0],
+        }
     }
 
     fn setup_frame(&mut self) {
@@ -301,6 +322,7 @@ void main() {
         };
 
         self.free_unused_resources();
+        self.update_dimensions();
 
         // Whenever the window resizes we need to recreate everything dependent on the window size.
         // In this example that includes the swapchain, the framebuffers and the dynamic state viewport.
@@ -319,9 +341,10 @@ void main() {
         self.acquire_next_image();
     }
 
-    fn handle_input(&mut self) {
+    pub fn handle_input(&mut self) {
         let mut done = false;
         let mut recreate_swapchain = false;
+        let mut unprocessed_events = vec![];
         self.events_loop.poll_events(|ev| match ev {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -331,12 +354,27 @@ void main() {
                 event: WindowEvent::Resized(_),
                 ..
             } => recreate_swapchain = true,
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput {
+                    ..
+                },
+                ..
+            } => {
+                if let Some(keycode) = winit_event_to_keydown(ev) {
+                    unprocessed_events.push(keycode);
+                }
+            },
             _ => (),
         });
 
         // for avoiding problems with borrow checker
+        unprocessed_events.iter().for_each(|&keycode| self.unprocessed_events.push(keycode));
         self.recreate_swapchain = recreate_swapchain;
         self.done = done
+    }
+
+    fn clear_unprocessed_events(&mut self) {
+        self.unprocessed_events = vec![];
     }
 
     fn create_command_buffer(&mut self) {
@@ -513,6 +551,12 @@ void main() {
             Some([dimensions.0, dimensions.1])
         } else {
             None
+        }
+    }
+
+    fn update_dimensions(&mut self) {
+        if let Some(dimensions) = self.get_dimensions() {
+            self.dimensions = dimensions;
         }
     }
 
