@@ -62,6 +62,7 @@ struct FrameData {
 
 impl App {
     pub fn new() -> Self {
+        panic!("Testing breaking changes.");
         let instance = get_instance();
         let physical = get_physical_device(&instance);
         println!(
