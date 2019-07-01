@@ -1,0 +1,45 @@
+- first code a simple rotating textured cube or something, then make the corresponding library
+- then code what a basic 3D snake game should look like, then improve the corresponding library
+
+- provide high and low-level options.
+    - High level: load a model, create a material (include option to use PBR style settings or use own shader), set scale and position and done
+
+- one major thing to decide: how to handle modifications to meshes and materials
+- how can the user communicate with the GPU?
+- maybe provide direct access to vulkano (the device, queue, etc) for advanced users and niche uses
+- maybe provide a structure where if a variable is changed, the changes are automatically propagated to the GPU
+- things should be as modular as possible, and the user should be able to implement their own versions of functions
+- research traits and generics
+
+Basic Structure:
+    - update only when the user wants to (perhaps also provide an immediate mode that is less focused on performance but updates after every change)
+    - implement batch-mode first because immediate mode can be built on top of that
+    - decide whether to let input handling up to the user or part of the library (i think seperate from library is better)
+    - split the library into as many individual parts as possible
+        - eventual pieces:
+            - PBR -> shader converter
+            - Mesh loading and generating library
+            - Camera library
+            - World library for storing and positioning multiple meshes that may be rotated, scaled, etc.
+            - Debugging module? stuff like overlays
+            - Maybe a macro library for making things shorter
+                - instead of sth like "createcube(...); position_obj(...); scale_obj(...)", "cubeAt!(...)"
+            - An OPTIONAL library that wraps all these together - it needs to be possible to use them individually too
+    - when you create an object, it should return a reference to that object that allows modifying it in whatever way
+
+- compare performance with my library vs pure vulkano
+
+todo:
+    - try own traits
+    - look at existing rendering engines:
+        - wickedengine
+        - unreal
+        - rendy
+        - three.js
+    - look for sth to use for a gui
+        - i think dear imgui bindings exist for rust
+    - make a demo as soon as possible
+    - get more experience with render passes
+    - research ecs
+        - try using typedef instead of struct with one field
+    - try multithreaded submissions to vulkano

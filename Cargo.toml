@@ -1,0 +1,17 @@
+[package]
+name = "render-engine"
+version = "0.1.0"
+authors = ["cynic64 <f3bl@gmx.com>"]
+edition = "2018"
+
+[dependencies]
+vulkano = "0.12"
+vulkano-win = "0.12"
+vulkano-shaders = "0.12"
+winit = "0.19"
+cgmath = "0.17"
+image = "0.21"
+time = "0.1.38"
+
+[profile.release]
+debug = true
