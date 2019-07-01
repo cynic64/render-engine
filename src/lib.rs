@@ -62,7 +62,6 @@ struct FrameData {
 
 impl App {
     pub fn new() -> Self {
-        panic!("Testing breaking changes.");
         let instance = get_instance();
         let physical = get_physical_device(&instance);
         println!(
@@ -505,7 +504,7 @@ void main() {
         );
     }
 
-    pub fn get_dimensions(&self) -> Option<[u32, u32]> {
+    pub fn get_dimensions(&self) -> Option<[u32; 2]> {
         if let Some(dimensions) = self.surface.window().get_inner_size() {
             let dimensions: (u32, u32) = dimensions
                 .to_physical(self.surface.window().get_hidpi_factor())
