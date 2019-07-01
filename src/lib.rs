@@ -505,7 +505,7 @@ void main() {
         );
     }
 
-    fn get_dimensions(&self) -> Option<[u32, u32]> {
+    pub fn get_dimensions(&self) -> Option<[u32, u32]> {
         if let Some(dimensions) = self.surface.window().get_inner_size() {
             let dimensions: (u32, u32) = dimensions
                 .to_physical(self.surface.window().get_hidpi_factor())
