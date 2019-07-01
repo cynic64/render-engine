@@ -355,20 +355,20 @@ void main() {
                 ..
             } => recreate_swapchain = true,
             Event::WindowEvent {
-                event: WindowEvent::KeyboardInput {
-                    ..
-                },
+                event: WindowEvent::KeyboardInput { .. },
                 ..
             } => {
                 if let Some(keycode) = winit_event_to_keydown(ev) {
                     unprocessed_events.push(keycode);
                 }
-            },
+            }
             _ => (),
         });
 
         // for avoiding problems with borrow checker
-        unprocessed_events.iter().for_each(|&keycode| self.unprocessed_events.push(keycode));
+        unprocessed_events
+            .iter()
+            .for_each(|&keycode| self.unprocessed_events.push(keycode));
         self.recreate_swapchain = recreate_swapchain;
         self.done = done
     }
@@ -750,8 +750,4 @@ fn window_size_dependent_setup(
             ) as Arc<FramebufferAbstract + Send + Sync>
         })
         .collect::<Vec<_>>()
-}
-
-pub fn get_elapsed(start: std::time::Instant) -> f32 {
-    start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0
 }
