@@ -477,14 +477,12 @@ void main() {
 
     fn create_new_swapchain(&mut self) {
         // Get the new dimensions of the window.
-        let dimensions = if let Some(dimensions) = self.surface.window().get_inner_size() {
-            let dimensions: (u32, u32) = dimensions
-                .to_physical(self.surface.window().get_hidpi_factor())
-                .into();
-            [dimensions.0, dimensions.1]
-        } else {
+        let dimensions = self.get_dimensions();
+        if dimensions.is_none() {
             return;
-        };
+        }
+
+        let dimensions = dimensions.unwrap();
 
         let tuple = match self.swapchain.recreate_with_dimension(dimensions) {
             Ok(r) => r,
@@ -505,6 +503,18 @@ void main() {
             self.render_pass.clone(),
             &mut self.dynamic_state,
         );
+    }
+
+    fn get_dimensions(&self) -> Option<[u32, u32]> {
+        if let Some(dimensions) = self.surface.window().get_inner_size() {
+            let dimensions: (u32, u32) = dimensions
+                .to_physical(self.surface.window().get_hidpi_factor())
+                .into();
+
+            Some([dimensions.0, dimensions.1])
+        } else {
+            None
+        }
     }
 
     fn acquire_next_image(&mut self) {
