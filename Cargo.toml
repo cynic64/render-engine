@@ -12,6 +12,7 @@ winit = "0.19"
 cgmath = "0.17"
 image = "0.21"
 time = "0.1.38"
+nalgebra-glm = "0.4"
 
 [profile.release]
 debug = true

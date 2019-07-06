@@ -1,5 +1,7 @@
 use super::*;
 
+extern crate nalgebra_glm as glm;
+
 type ConcreteGraphicsPipeline = GraphicsPipeline<
     SingleBufferDefinition<Vertex>,
     Box<PipelineLayoutAbstract + Send + Sync + 'static>,
@@ -35,6 +37,11 @@ pub struct App {
     vertex_shader: vs::Shader,
     fragment_shader: fs::Shader,
     available_renderpasses: AvailableRenderPasses,
+    // MVP
+    model: glm::Mat4,
+    view: [[f32; 4]; 4],
+    projection: glm::Mat4,
+    uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
 }
 
 struct AvailableRenderPasses {
@@ -92,7 +99,6 @@ impl App {
         // `vulkano-shaders` crate docs. You can view them at https://docs.rs/vulkano-shaders/
         //
         // TODO: explain this in details
-
         let vs = vs::Shader::load(device.clone()).unwrap();
         let fs = fs::Shader::load(device.clone()).unwrap();
 
@@ -170,6 +176,30 @@ impl App {
 
         let vbuf_creator = VbufCreator::new(device.clone());
 
+        // mvp
+        let model = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0));
+        let view: [[f32; 4]; 4] = {
+            let position = glm::vec3(2.0, 10.0, 2.0);
+            let up = glm::vec3(0.0, 1.0, 0.0);
+
+            glm::look_at(&position, &glm::vec3(0.0, 0.0, 0.0), &up).into()
+        };
+        let projection = glm::perspective(
+            // aspect ratio
+            16. / 9.,
+            // fov
+            1.0,
+            // near
+            0.1,
+            // far
+            100_000_000.,
+        );
+
+        let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(
+            device.clone(),
+            vulkano::buffer::BufferUsage::all(),
+        );
+
         App {
             instance: instance.clone(),
             events_loop,
@@ -203,6 +233,10 @@ impl App {
             vertex_shader: vs,
             fragment_shader: fs,
             available_renderpasses,
+            model,
+            view,
+            projection,
+            uniform_buffer,
         }
     }
 
@@ -254,7 +288,7 @@ impl App {
         let screen_y = (pixel.y as f32) / (self.dimensions[1] as f32) * 2.0 - 1.0;
 
         Vertex {
-            position: [screen_x, screen_y],
+            position: [screen_x, screen_y, 0.0],
             color,
         }
     }
@@ -331,6 +365,27 @@ impl App {
     }
 
     fn create_command_buffer(&mut self) {
+        let uniform_buffer_subbuffer = {
+            let uniform_data = vs::ty::Data {
+                world: self.model.into(),
+                view: self.view,
+                proj: self.projection.into(),
+            };
+
+            self.uniform_buffer.next(uniform_data).unwrap()
+        };
+
+        let uniform_set = Arc::new(
+            vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(
+                self.pipeline.clone(),
+                0,
+            )
+            .add_buffer(uniform_buffer_subbuffer)
+            .unwrap()
+            .build()
+            .unwrap(),
+        );
+
         let clear_values = if self.multisampling_enabled {
             vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into()]
         } else {
@@ -376,7 +431,7 @@ impl App {
                     self.pipeline.clone(),
                     &self.dynamic_state,
                     vertex_buffer.clone(),
-                    (),
+                    uniform_set.clone(),
                     (),
                 )
                 .unwrap();
@@ -813,12 +868,19 @@ mod vs {
         src: "
             #version 450
 
-            layout(location = 0) in vec2 position;
+            layout(location = 0) in vec3 position;
             layout(location = 1) in vec4 color;
             layout(location = 0) out vec4 v_color;
 
+            layout(set = 0, binding = 0) uniform Data {
+                mat4 world;
+                mat4 view;
+                mat4 proj;
+            } uniforms;
+
             void main() {
-                gl_Position = vec4(position, 0.0, 1.0);
+                mat4 worldview = uniforms.view * uniforms.world;
+                gl_Position = uniforms.proj * worldview * vec4(position, 1.0);
                 v_color = color;
             }"
     }
