@@ -29,6 +29,7 @@ pub struct App {
     start_time: std::time::Instant,
     frames_drawn: u32,
     vbuf_creator: VbufCreator,
+    swapchain_caps: vulkano::swapchain::Capabilities,
 }
 
 struct FrameData {
@@ -125,6 +126,9 @@ void main() {
         // implicitly does a lot of computation whenever you draw. In Vulkan, you have to do all this
         // manually.
 
+        let caps = surface.capabilities(physical).unwrap();
+        let dimensions = caps.current_extent.unwrap_or([1024, 768]);
+
         // The next step is to create a *render pass*, which is an object that describes where the
         // output of the graphics pipeline will go. It describes the layout of the images
         // where the colors, depth and/or stencil information will be written.
@@ -132,28 +136,25 @@ void main() {
             vulkano::single_pass_renderpass!(
                 device.clone(),
                 attachments: {
-                    // `color` is a custom name we give to the first and only attachment.
-                    color: {
-                        // `load: Clear` means that we ask the GPU to clear the content of this
-                        // attachment at the start of the drawing.
+                    multisampled_color: {
                         load: Clear,
-                        // `store: Store` means that we ask the GPU to store the output of the draw
-                        // in the actual image. We could also ask it to discard the result.
-                        store: Store,
-                        // `format: <ty>` indicates the type of the format of the image. This has to
-                        // be one of the types of the `vulkano::format` module (or alternatively one
-                        // of your structs that implements the `FormatDesc` trait). Here we use the
-                        // same format as the swapchain.
+                        store: DontCare,
                         format: swapchain.format(),
-                        // TODO:
+                        samples: 4,
+                    },
+                    resolve_color: {
+                        load: Clear,
+                        store: Store,
+                        format: swapchain.format(),
                         samples: 1,
                     }
                 },
                 pass: {
                     // We use the attachment named `color` as the one and only color attachment.
-                    color: [color],
+                    color: [multisampled_color],
                     // No depth-stencil attachment is indicated with empty brackets.
-                    depth_stencil: {}
+                    depth_stencil: {},
+                    resolve: [resolve_color],
                 }
             )
             .unwrap(),
@@ -187,9 +188,15 @@ void main() {
 
         // Dynamic viewports allow us to recreate just the viewport when the window is resized
         // Otherwise we would have to recreate the whole pipeline.
-        let mut dynamic_state = DynamicState {
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+            depth_range: 0.0..1.0,
+        };
+        let dynamic_state = DynamicState {
             line_width: None,
-            viewports: None,
+            viewports: Some(
+                vec![viewport]),
             scissors: None,
         };
 
@@ -198,8 +205,7 @@ void main() {
         //
         // Since we need to draw to multiple images, we are going to create a different framebuffer for
         // each image.
-        let framebuffers =
-            window_size_dependent_setup(&images, render_pass.clone(), &mut dynamic_state);
+        let framebuffers = vec![];
 
         // Initialization is finally finished!
 
@@ -212,7 +218,7 @@ void main() {
         // Rendering to an image of that swapchain will not produce any error, but may or may not work.
         // To continue rendering, we need to recreate the swapchain by creating a new swapchain.
         // Here, we remember that we need to do this for the next loop iteration.
-        let recreate_swapchain = false;
+        let recreate_swapchain = true;
 
         // In the loop below we are going to submit commands to the GPU. Submitting a command produces
         // an object that implements the `GpuFuture` trait, which holds the resources for as long as
@@ -251,6 +257,7 @@ void main() {
             start_time: std::time::Instant::now(),
             frames_drawn: 0,
             vbuf_creator,
+            swapchain_caps: caps,
         }
     }
 
@@ -363,13 +370,13 @@ void main() {
     }
 
     fn create_command_buffer(&mut self) {
-        let clear_values = vec![[0.2, 0.2, 0.2, 1.0].into()];
+        let clear_values = vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into()];
 
         let mut command_buffer_unfinished = AutoCommandBufferBuilder::primary_one_time_submit(
             self.device.clone(),
             self.queue.family(),
         )
-        .unwrap()
+        .expect("1")
         // Before we can draw, we have to *enter a render pass*. There are two methods to do
         // this: `draw_inline` and `draw_secondary`. The latter is a bit more advanced and is
         // not covered here.
@@ -391,7 +398,7 @@ void main() {
             false,
             clear_values,
         )
-        .unwrap();
+        .expect("2");
 
         // add draw calls for every vertex buffer onto the command buffer
         for vertex_buffer in self.vertex_buffers.iter() {
@@ -407,7 +414,7 @@ void main() {
                     (),
                     (),
                 )
-                .unwrap();
+                .expect("3");
         }
 
         let command_buffer_finished = command_buffer_unfinished
@@ -415,10 +422,10 @@ void main() {
             // subpasses we could have called `next_inline` (or `next_secondary`) to jump to the
             // next subpass.
             .end_render_pass()
-            .unwrap()
+            .expect("4")
             // Finish building the command buffer by calling `build`.
             .build()
-            .unwrap();
+            .expect("5");
 
         self.frame_data.command_buffer = Some(command_buffer_finished);
     }
@@ -451,7 +458,7 @@ void main() {
                 ",
                 ),
             )
-            .unwrap()
+            .expect("here 1")
             // The color output is now expected to contain our triangle. But in order to show it on
             // the screen, we have to *present* the image by calling `present`.
             //
@@ -506,6 +513,15 @@ void main() {
 
         let dimensions = dimensions.unwrap();
 
+        self.dynamic_state.viewports = Some(
+            vec![
+                Viewport {
+                    origin: [0.0, 0.0],
+                    dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+                    depth_range: 0.0..1.0,
+                },
+            ]);
+
         let tuple = match self.swapchain.recreate_with_dimension(dimensions) {
             Ok(r) => r,
             // This error tends to happen when the user is manually resizing the window.
@@ -518,16 +534,44 @@ void main() {
         let new_images: Vec<Arc<SwapchainImage<Window>>> = tuple.1;
 
         self.swapchain = new_swapchain;
+        self.images = new_images;
+
         // Because framebuffers contains an Arc on the old swapchain, we need to
         // recreate framebuffers as well.
-        self.framebuffers = window_size_dependent_setup(
-            &new_images,
-            self.render_pass.clone(),
-            &mut self.dynamic_state,
-        );
+        self.framebuffers = vec![];
+        self.rebuild_framebuffers();
     }
 
-    pub fn get_dimensions(&self) -> Option<[u32; 2]> {
+    fn rebuild_framebuffers(&mut self) {
+        self.framebuffers = self
+            .images
+            .iter()
+            .map(|image| {
+                let multisampled_color =
+                    vulkano::image::attachment::AttachmentImage::transient_multisampled(
+                        self.device.clone(),
+                        self.dimensions,
+                        4,
+                        self.swapchain_caps.supported_formats[0].0,
+                    )
+                    .unwrap();
+
+                let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
+                    vulkano::framebuffer::Framebuffer::start(self.render_pass.clone())
+                        .add(multisampled_color.clone())
+                        .unwrap()
+                        .add(image.clone())
+                        .unwrap()
+                        .build()
+                        .unwrap(),
+                );
+
+                fba
+            })
+            .collect::<Vec<_>>();
+    }
+
+    fn get_dimensions(&self) -> Option<[u32; 2]> {
         if let Some(dimensions) = self.surface.window().get_inner_size() {
             let dimensions: (u32, u32) = dimensions
                 .to_physical(self.surface.window().get_hidpi_factor())
@@ -550,6 +594,7 @@ void main() {
             match swapchain::acquire_next_image(self.swapchain.clone(), None) {
                 Ok(r) => r,
                 Err(AcquireError::OutOfDate) => {
+                    println!("Swapchain out of date when trying to acquire next image");
                     self.recreate_swapchain = true;
                     return;
                 }
@@ -706,33 +751,4 @@ fn create_swapchain_and_images(
         None,
     )
     .unwrap()
-}
-
-/// This method is called once during initialization, then again whenever the window is resized
-fn window_size_dependent_setup(
-    images: &[Arc<SwapchainImage<Window>>],
-    render_pass: Arc<RenderPassAbstract + Send + Sync>,
-    dynamic_state: &mut DynamicState,
-) -> Vec<Arc<FramebufferAbstract + Send + Sync>> {
-    let dimensions = images[0].dimensions();
-
-    let viewport = Viewport {
-        origin: [0.0, 0.0],
-        dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-        depth_range: 0.0..1.0,
-    };
-    dynamic_state.viewports = Some(vec![viewport]);
-
-    images
-        .iter()
-        .map(|image| {
-            Arc::new(
-                Framebuffer::start(render_pass.clone())
-                    .add(image.clone())
-                    .unwrap()
-                    .build()
-                    .unwrap(),
-            ) as Arc<FramebufferAbstract + Send + Sync>
-        })
-        .collect::<Vec<_>>()
 }
