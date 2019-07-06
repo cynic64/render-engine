@@ -13,7 +13,7 @@ pub struct App {
     physical_device_index: usize,
     device: Arc<Device>,
     queue: Arc<Queue>,
-    swapchain: Arc<Swapchain<Window>>,
+    swapchain: Option<Arc<Swapchain<Window>>>,
     images: Vec<Arc<SwapchainImage<Window>>>,
     render_pass: Arc<RenderPassAbstract + Send + Sync>,
     pipeline: Arc<ConcreteGraphicsPipeline>,
@@ -30,6 +30,7 @@ pub struct App {
     frames_drawn: u32,
     vbuf_creator: VbufCreator,
     swapchain_caps: vulkano::swapchain::Capabilities,
+    image_format: vulkano::format::Format,
 }
 
 struct FrameData {
@@ -71,12 +72,12 @@ impl App {
         // iterator and throw it away.
         let queue = queues.next().unwrap();
 
-        let (swapchain, images) = create_swapchain_and_images(
-            physical.clone(),
-            surface.clone(),
-            device.clone(),
-            queue.clone(),
-        );
+        // We don't need to initialize the swapchain or images write now because by setting recreate_swapchain
+        // to true, they will be automatically rebuilt before the first frame is drawn.
+        let swapchain = None;
+        let images = vec![];
+        let recreate_swapchain = true;
+
 
         // The next step is to create the shaders.
         //
@@ -126,8 +127,10 @@ void main() {
         // implicitly does a lot of computation whenever you draw. In Vulkan, you have to do all this
         // manually.
 
-        let caps = surface.capabilities(physical).unwrap();
-        let dimensions = caps.current_extent.unwrap_or([1024, 768]);
+        let swapchain_caps = surface.capabilities(physical).unwrap();
+        // on my machine this is B8G8R8Unorm
+        let image_format = swapchain_caps.supported_formats[0].0;
+        let dimensions = swapchain_caps.current_extent.unwrap_or([1024, 768]);
 
         // The next step is to create a *render pass*, which is an object that describes where the
         // output of the graphics pipeline will go. It describes the layout of the images
@@ -139,13 +142,13 @@ void main() {
                     multisampled_color: {
                         load: Clear,
                         store: DontCare,
-                        format: swapchain.format(),
+                        format: image_format,
                         samples: 4,
                     },
                     resolve_color: {
                         load: Clear,
                         store: Store,
-                        format: swapchain.format(),
+                        format: image_format,
                         samples: 1,
                     }
                 },
@@ -209,17 +212,6 @@ void main() {
 
         // Initialization is finally finished!
 
-        // In some situations, the swapchain will become invalid by it This includes for example
-        // when the window is resized (as the images of the swapchain will no longer match the
-        // window's) or, on Android, when the application went to the background and goes back to the
-        // foreground.
-        //
-        // In this situation, acquiring a swapchain image or presenting it will return an error.
-        // Rendering to an image of that swapchain will not produce any error, but may or may not work.
-        // To continue rendering, we need to recreate the swapchain by creating a new swapchain.
-        // Here, we remember that we need to do this for the next loop iteration.
-        let recreate_swapchain = true;
-
         // In the loop below we are going to submit commands to the GPU. Submitting a command produces
         // an object that implements the `GpuFuture` trait, which holds the resources for as long as
         // they are in use by the GPU.
@@ -257,7 +249,8 @@ void main() {
             start_time: std::time::Instant::now(),
             frames_drawn: 0,
             vbuf_creator,
-            swapchain_caps: caps,
+            swapchain_caps,
+            image_format,
         }
     }
 
@@ -306,6 +299,7 @@ void main() {
     fn setup_frame(&mut self) {
         // wipes frame_data, then brings everything up to the point where vertex buffers can be
         // created and the command buffer can be submitted.
+        self.update_dimensions();
 
         self.frame_data = FrameData {
             image_num: None,
@@ -314,7 +308,6 @@ void main() {
         };
 
         self.free_unused_resources();
-        self.update_dimensions();
 
         // Whenever the window resizes we need to recreate everything dependent on the window size.
         // In this example that includes the swapchain, the framebuffers and the dynamic state viewport.
@@ -376,7 +369,7 @@ void main() {
             self.device.clone(),
             self.queue.family(),
         )
-        .expect("1")
+        .unwrap()
         // Before we can draw, we have to *enter a render pass*. There are two methods to do
         // this: `draw_inline` and `draw_secondary`. The latter is a bit more advanced and is
         // not covered here.
@@ -398,7 +391,7 @@ void main() {
             false,
             clear_values,
         )
-        .expect("2");
+        .unwrap();
 
         // add draw calls for every vertex buffer onto the command buffer
         for vertex_buffer in self.vertex_buffers.iter() {
@@ -414,7 +407,7 @@ void main() {
                     (),
                     (),
                 )
-                .expect("3");
+                .unwrap();
         }
 
         let command_buffer_finished = command_buffer_unfinished
@@ -422,10 +415,10 @@ void main() {
             // subpasses we could have called `next_inline` (or `next_secondary`) to jump to the
             // next subpass.
             .end_render_pass()
-            .expect("4")
+            .unwrap()
             // Finish building the command buffer by calling `build`.
             .build()
-            .expect("5");
+            .unwrap();
 
         self.frame_data.command_buffer = Some(command_buffer_finished);
     }
@@ -458,7 +451,7 @@ void main() {
                 ",
                 ),
             )
-            .expect("here 1")
+            .unwrap()
             // The color output is now expected to contain our triangle. But in order to show it on
             // the screen, we have to *present* the image by calling `present`.
             //
@@ -467,7 +460,16 @@ void main() {
             // the GPU has finished executing the command buffer that draws the triangle.
             .then_swapchain_present(
                 self.queue.clone(),
-                self.swapchain.clone(),
+                self.swapchain.as_ref().expect(
+                    "
+---------------------------------------------------------------------------------------------
+    [submit_and_check]    (then_swapchain_present)
+-> When trying to submit the command buffer and present it to the swapchain, found that
+-> the swapchain does not exist.
+-> Unless you're trying to something really weird, the internal implementation probably
+-> fucked up, because this shouldn't happen.
+---------------------------------------------------------------------------------------------
+                    ").clone(),
                 self.frame_data.image_num.expect(
                     "
 ---------------------------------------------------------------------------------------------
@@ -505,35 +507,58 @@ void main() {
     }
 
     fn create_new_swapchain(&mut self) {
-        // Get the new dimensions of the window.
-        let dimensions = self.get_dimensions();
-        if dimensions.is_none() {
-            return;
-        }
-
-        let dimensions = dimensions.unwrap();
-
         self.dynamic_state.viewports = Some(
             vec![
                 Viewport {
                     origin: [0.0, 0.0],
-                    dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+                    dimensions: [self.dimensions[0] as f32, self.dimensions[1] as f32],
                     depth_range: 0.0..1.0,
                 },
             ]);
 
-        let tuple = match self.swapchain.recreate_with_dimension(dimensions) {
-            Ok(r) => r,
-            // This error tends to happen when the user is manually resizing the window.
-            // Simply restarting the loop is the easiest way to fix this issue.
-            Err(SwapchainCreationError::UnsupportedDimensions) => return,
-            Err(err) => panic!("{:?}", err),
+        let tuple = match &self.swapchain {
+            // the swapchain already exists and is just out of date, meaning we can
+            // re-build the old one rather than making a whole new one.
+            Some(swapchain) => match (&swapchain).recreate_with_dimension(self.dimensions) {
+                        Ok(r) => r,
+                        // This error tends to happen when the user is manually resizing the window.
+                        // Simply restarting the loop is the easiest way to fix this issue.
+                        Err(SwapchainCreationError::UnsupportedDimensions) => {
+                            println!("Unsupported dimensions: {:?}", self.dimensions);
+                            return;
+                        },
+                        Err(err) => panic!("{:?}", err),
+                    },
+            None => match Swapchain::new(
+                    self.device.clone(),
+                    self.surface.clone(),
+                    self.swapchain_caps.min_image_count,
+                    self.image_format,
+                    self.dimensions,
+                    1,
+                    self.swapchain_caps.supported_usage_flags,
+                    &self.queue,
+                    SurfaceTransform::Identity,
+                    self.swapchain_caps.supported_composite_alpha.iter().next().unwrap(),
+                    PresentMode::Fifo,
+                    true,
+                    None,
+                ) {
+                    Ok(r) => r,
+                    // This error tends to happen when the user is manually resizing the window.
+                    // Simply restarting the loop is the easiest way to fix this issue.
+                    Err(SwapchainCreationError::UnsupportedDimensions) => {
+                        println!("Unsupported dimensions: {:?}", self.dimensions);
+                        return;
+                    },
+                    Err(err) => panic!("{:?}", err),
+                },
         };
 
         let new_swapchain: Arc<Swapchain<Window>> = tuple.0;
         let new_images: Vec<Arc<SwapchainImage<Window>>> = tuple.1;
 
-        self.swapchain = new_swapchain;
+        self.swapchain = Some(new_swapchain);
         self.images = new_images;
 
         // Because framebuffers contains an Arc on the old swapchain, we need to
@@ -552,7 +577,7 @@ void main() {
                         self.device.clone(),
                         self.dimensions,
                         4,
-                        self.swapchain_caps.supported_formats[0].0,
+                        self.image_format,
                     )
                     .unwrap();
 
@@ -591,7 +616,15 @@ void main() {
 
     fn acquire_next_image(&mut self) {
         let (image_num, acquire_future) =
-            match swapchain::acquire_next_image(self.swapchain.clone(), None) {
+            match swapchain::acquire_next_image(self.swapchain.as_ref().expect(
+                "
+---------------------------------------------------------------------------------------------
+    [acquire_next_image]    (self.swapchain.expect)
+-> When trying to acquire the next image, found that the swapchain does not exist.
+-> Unless you're trying to something really weird, the internal implementation probably
+-> fucked up, because this shouldn't happen.
+---------------------------------------------------------------------------------------------
+                ").clone(), None) {
                 Ok(r) => r,
                 Err(AcquireError::OutOfDate) => {
                     println!("Swapchain out of date when trying to acquire next image");
@@ -686,69 +719,6 @@ fn get_device_and_queues(
         physical.supported_features(),
         &device_ext,
         [(queue_family, 0.5)].iter().cloned(),
-    )
-    .unwrap()
-}
-
-fn create_swapchain_and_images(
-    physical: PhysicalDevice,
-    surface: Arc<Surface<Window>>,
-    device: Arc<Device>,
-    queue: Arc<Queue>,
-) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
-    // Before we can draw on the surface, we have to create what is called a swapchain. Creating
-    // a swapchain allocates the color buffers that will contain the image that will ultimately
-    // be visible on the screen. These images are returned alongside with the swapchain.
-
-    // Querying the capabilities of the surface. When we create the swapchain we can only
-    // pass values that are allowed by the capabilities.
-    let caps = surface.capabilities(physical).unwrap();
-
-    let usage = caps.supported_usage_flags;
-
-    // The alpha mode indicates how the alpha value of the final image will behave. For example
-    // you can choose whether the window will be opaque or transparent.
-    let alpha = caps.supported_composite_alpha.iter().next().unwrap();
-
-    // Choosing the internal format that the images will have.
-    let format = caps.supported_formats[0].0;
-
-    // The dimensions of the window, only used to initially setup the swapchain.
-    // NOTE:
-    // On some drivers the swapchain dimensions are specified by `caps.current_extent` and the
-    // swapchain size must use these dimensions.
-    // These dimensions are always the same as the window dimensions
-    //
-    // However other drivers dont specify a value i.e. `caps.current_extent` is `None`
-    // These drivers will allow anything but the only sensible value is the window dimensions.
-    //
-    // Because for both of these cases, the swapchain needs to be the window dimensions, we just use that.
-    let initial_dimensions = if let Some(dimensions) = surface.window().get_inner_size() {
-        // convert to physical pixels
-        let dimensions: (u32, u32) = dimensions
-            .to_physical(surface.window().get_hidpi_factor())
-            .into();
-        [dimensions.0, dimensions.1]
-    } else {
-        // The window no longer exists so exit the application.
-        panic!("The window no longer exists! this should not happen.");
-    };
-
-    // Please take a look at the docs for the meaning of the parameters we didn't mention.
-    Swapchain::new(
-        device.clone(),
-        surface.clone(),
-        caps.min_image_count,
-        format,
-        initial_dimensions,
-        1,
-        usage,
-        &queue,
-        SurfaceTransform::Identity,
-        alpha,
-        PresentMode::Fifo,
-        true,
-        None,
     )
     .unwrap()
 }
