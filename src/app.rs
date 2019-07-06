@@ -19,7 +19,7 @@ pub struct App {
     pipeline: Arc<ConcreteGraphicsPipeline>,
     dynamic_state: DynamicState,
     framebuffers: Vec<Arc<FramebufferAbstract + Send + Sync>>,
-    recreate_swapchain: bool,
+    must_rebuild_swapchain: bool,
     previous_frame_end: Box<GpuFuture>,
     pub done: bool,
     pub dimensions: [u32; 2],
@@ -72,11 +72,11 @@ impl App {
         // iterator and throw it away.
         let queue = queues.next().unwrap();
 
-        // We don't need to initialize the swapchain or images write now because by setting recreate_swapchain
+        // We don't need to initialize the swapchain or images write now because by setting must_rebuild_swapchain
         // to true, they will be automatically rebuilt before the first frame is drawn.
         let swapchain = None;
         let images = vec![];
-        let recreate_swapchain = true;
+        let must_rebuild_swapchain = true;
 
 
         // The next step is to create the shaders.
@@ -235,7 +235,7 @@ void main() {
             pipeline,
             dynamic_state,
             framebuffers,
-            recreate_swapchain,
+            must_rebuild_swapchain,
             previous_frame_end,
             done: false,
             dimensions: [0, 0],
@@ -311,9 +311,9 @@ void main() {
 
         // Whenever the window resizes we need to recreate everything dependent on the window size.
         // In this example that includes the swapchain, the framebuffers and the dynamic state viewport.
-        if self.recreate_swapchain {
-            self.create_new_swapchain();
-            self.recreate_swapchain = false;
+        if self.must_rebuild_swapchain {
+            self.rebuild_swapchain();
+            self.must_rebuild_swapchain = false;
         }
 
         // Before we can draw on the output, we have to *acquire* an image from the swapchain. If
@@ -328,7 +328,7 @@ void main() {
 
     pub fn handle_input(&mut self) {
         let mut done = false;
-        let mut recreate_swapchain = false;
+        let mut must_rebuild_swapchain = false;
         let mut unprocessed_events = vec![];
         self.events_loop.poll_events(|ev| match ev {
             Event::WindowEvent {
@@ -338,7 +338,7 @@ void main() {
             Event::WindowEvent {
                 event: WindowEvent::Resized(_),
                 ..
-            } => recreate_swapchain = true,
+            } => must_rebuild_swapchain = true,
             Event::WindowEvent {
                 event: WindowEvent::KeyboardInput { .. },
                 ..
@@ -354,7 +354,7 @@ void main() {
         unprocessed_events
             .iter()
             .for_each(|&keycode| self.unprocessed_events.push(keycode));
-        self.recreate_swapchain = recreate_swapchain;
+        self.must_rebuild_swapchain = must_rebuild_swapchain;
         self.done = done
     }
 
@@ -488,7 +488,7 @@ void main() {
                 self.previous_frame_end = Box::new(future) as Box<_>;
             }
             Err(FlushError::OutOfDate) => {
-                self.recreate_swapchain = true;
+                self.must_rebuild_swapchain = true;
                 self.previous_frame_end = Box::new(sync::now(self.device.clone())) as Box<_>;
             }
             Err(e) => {
@@ -506,7 +506,7 @@ void main() {
         self.previous_frame_end.cleanup_finished();
     }
 
-    fn create_new_swapchain(&mut self) {
+    fn rebuild_swapchain(&mut self) {
         self.dynamic_state.viewports = Some(
             vec![
                 Viewport {
@@ -596,7 +596,7 @@ void main() {
                 Ok(r) => r,
                 Err(AcquireError::OutOfDate) => {
                     println!("Swapchain out of date when trying to acquire next image");
-                    self.recreate_swapchain = true;
+                    self.must_rebuild_swapchain = true;
                     return;
                 }
                 Err(err) => panic!("{:?}", err),
