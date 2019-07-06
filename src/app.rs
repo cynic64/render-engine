@@ -46,12 +46,6 @@ impl App {
     pub fn new() -> Self {
         let instance = get_instance();
         let physical = get_physical_device(&instance);
-        println!(
-            "Using device: {} (type: {:?}, index: {})",
-            physical.name(),
-            physical.ty(),
-            physical.index()
-        );
 
         // The objective of this example is to draw a triangle on a window. To do so, we first need to
         // create the window.
