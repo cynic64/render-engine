@@ -519,50 +519,8 @@ void main() {
         let tuple = match &self.swapchain {
             // the swapchain already exists and is just out of date, meaning we can
             // re-build the old one rather than making a whole new one.
-            Some(swapchain) => match (&swapchain).recreate_with_dimension(self.dimensions) {
-                        Ok(r) => r,
-                        // This error tends to happen when the user is manually resizing the window.
-                        // Simply restarting the loop is the easiest way to fix this issue.
-                        Err(SwapchainCreationError::UnsupportedDimensions) => {
-                            println!("Unsupported dimensions: {:?}", self.dimensions);
-                            // the rest of the app relies on having a valid swapchain to
-                            // draw on, so we have to keep trying to re-create the swapchain
-                            // until it works.
-                            self.update_dimensions();
-                            self.create_new_swapchain();
-                            return;
-                        },
-                        Err(err) => panic!("{:?}", err),
-                    },
-            None => match Swapchain::new(
-                    self.device.clone(),
-                    self.surface.clone(),
-                    self.swapchain_caps.min_image_count,
-                    self.image_format,
-                    self.dimensions,
-                    1,
-                    self.swapchain_caps.supported_usage_flags,
-                    &self.queue,
-                    SurfaceTransform::Identity,
-                    self.swapchain_caps.supported_composite_alpha.iter().next().unwrap(),
-                    PresentMode::Fifo,
-                    true,
-                    None,
-                ) {
-                    Ok(r) => r,
-                    // This error tends to happen when the user is manually resizing the window.
-                    // Simply restarting the loop is the easiest way to fix this issue.
-                    Err(SwapchainCreationError::UnsupportedDimensions) => {
-                        println!("Unsupported dimensions: {:?}", self.dimensions);
-                        // the rest of the app relies on having a valid swapchain to
-                        // draw on, so we have to keep trying to re-create the swapchain
-                        // until it works.
-                        self.update_dimensions();
-                        self.create_new_swapchain();
-                        return;
-                    },
-                    Err(err) => panic!("{:?}", err),
-                },
+            Some(_swapchain) => self.create_swapchain_and_images_from_existing_swapchain(),
+            None => self.create_swapchain_and_images_from_scratch(),
         };
 
         let new_swapchain: Arc<Swapchain<Window>> = tuple.0;
@@ -646,6 +604,52 @@ void main() {
 
         self.frame_data.image_num = Some(image_num);
         self.frame_data.acquire_future = Some(acquire_future);
+    }
+
+    fn create_swapchain_and_images_from_existing_swapchain(&mut self) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+        let swapchain = self.swapchain.as_ref().expect(
+            "
+---------------------------------------------------------------------------------------------
+    [create_swapchain_and_images_from_existing_swapchain]    (self.swapchain.expect)
+-> When creating a new swapchain from an existing one (usually done because of a window
+-> resize), found that the swapchain doesn't exist. You probably fucked up and called this
+-> from somewhere where the app had no existing swapchain. Use
+-> create_swapchain_and_images_from_scratch for that.
+---------------------------------------------------------------------------------------------
+            ")
+            .clone();
+
+        let mut last_result = None;
+        while last_result.is_none() {
+            self.update_dimensions();
+            last_result = create_swapchain_and_images_from_existing_swapchain(swapchain.clone(), self.dimensions);
+        };
+
+        last_result.unwrap()
+    }
+
+    fn create_swapchain_and_images_from_scratch(&self) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+        match Swapchain::new(
+            self.device.clone(),
+            self.surface.clone(),
+            self.swapchain_caps.min_image_count,
+            self.image_format,
+            self.dimensions,
+            1,
+            self.swapchain_caps.supported_usage_flags,
+            &self.queue,
+            SurfaceTransform::Identity,
+            self.swapchain_caps.supported_composite_alpha.iter().next().unwrap(),
+            PresentMode::Fifo,
+            true,
+            None,
+        ) {
+            Ok(r) => r,
+            // This error tends to happen when the user is manually resizing the window.
+            // Simply restarting the loop is the easiest way to fix this issue.
+            Err(SwapchainCreationError::UnsupportedDimensions) => panic!("SwapchainCreationError::UnsupportedDimensions when creating initial swapchain. Should never happen."),
+            Err(err) => panic!("{:?}", err),
+        }
     }
 }
 
@@ -731,4 +735,16 @@ fn get_device_and_queues(
         [(queue_family, 0.5)].iter().cloned(),
     )
     .unwrap()
+}
+
+fn create_swapchain_and_images_from_existing_swapchain(old_swapchain: Arc<Swapchain<Window>>, dimensions: [u32; 2]) -> Option<(Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>)> {
+    match old_swapchain.recreate_with_dimension(dimensions) {
+        Ok(r) => Some(r),
+        Err(SwapchainCreationError::UnsupportedDimensions) => {
+            // this happens sometimes :\
+            println!("Unsupported dimensions: {:?}", dimensions);
+            None
+        },
+        Err(err) => panic!("{:?}", err),
+    }
 }
