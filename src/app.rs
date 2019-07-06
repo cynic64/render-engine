@@ -525,6 +525,11 @@ void main() {
                         // Simply restarting the loop is the easiest way to fix this issue.
                         Err(SwapchainCreationError::UnsupportedDimensions) => {
                             println!("Unsupported dimensions: {:?}", self.dimensions);
+                            // the rest of the app relies on having a valid swapchain to
+                            // draw on, so we have to keep trying to re-create the swapchain
+                            // until it works.
+                            self.update_dimensions();
+                            self.create_new_swapchain();
                             return;
                         },
                         Err(err) => panic!("{:?}", err),
@@ -549,6 +554,11 @@ void main() {
                     // Simply restarting the loop is the easiest way to fix this issue.
                     Err(SwapchainCreationError::UnsupportedDimensions) => {
                         println!("Unsupported dimensions: {:?}", self.dimensions);
+                        // the rest of the app relies on having a valid swapchain to
+                        // draw on, so we have to keep trying to re-create the swapchain
+                        // until it works.
+                        self.update_dimensions();
+                        self.create_new_swapchain();
                         return;
                     },
                     Err(err) => panic!("{:?}", err),
