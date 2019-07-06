@@ -11,6 +11,9 @@ Move -everything- that can possibly be simplified into functions, then wrappers 
 try and figure out a way to split out some dependencies. For example, not everyone needs nalgebra for an MVP if they are only doing 2D graphics
 maybe app_3d and app_2d? or just make 2d use an ortho camera (probably best)
 run clippy
+channels for lots of things. For example, for the camera, add a multiple-sender-single-reciever channel for a thread that constantly runs.
+    anybody can clone the sender and send instructions (from an enum), like CameraInstruction::MoveForward
+make sure users can use their own version of stuff. if they want their own camera, make that possible.
 ------
 
 - first code a simple rotating textured cube or something, then make the corresponding library

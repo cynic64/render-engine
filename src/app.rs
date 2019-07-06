@@ -79,6 +79,8 @@ impl App {
             .build_vk_surface(&events_loop, instance.clone())
             .unwrap();
 
+        surface.window().hide_cursor(true);
+
         let (device, mut queues) = get_device_and_queues(physical, surface.clone());
 
         // Since we can request multiple queues, the `queues` variable is in fact an iterator. In this
@@ -142,6 +144,7 @@ impl App {
                 // We have to indicate which subpass of which render pass this pipeline is going to be used
                 // in. The pipeline will only be usable from this particular subpass.
                 .render_pass(Subpass::from(renderpass.clone(), 0).unwrap())
+                .depth_stencil_simple_depth()
                 // Now that our builder is filled, we call `build()` to obtain an actual pipeline.
                 .build(device.clone())
                 .unwrap(),
@@ -418,9 +421,9 @@ impl App {
         );
 
         let clear_values = if self.multisampling_enabled {
-            vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into()]
+            vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into(), 1f32.into(), vulkano::format::ClearValue::None]
         } else {
-            vec![[0.2, 0.2, 0.2, 1.0].into()]
+            vec![[0.2, 0.2, 0.2, 1.0].into(), 1f32.into()]
         };
 
         let mut command_buffer_unfinished = AutoCommandBufferBuilder::primary_one_time_submit(
@@ -608,13 +611,34 @@ impl App {
                         )
                         .unwrap();
 
+                    let multisampled_depth =
+                        vulkano::image::attachment::AttachmentImage::transient_multisampled(
+                            self.device.clone(),
+                            self.dimensions,
+                            4,
+                            vulkano::format::Format::D16Unorm,
+                        )
+                        .unwrap();
+
+                    let resolve_depth =
+                        vulkano::image::attachment::AttachmentImage::transient(
+                            self.device.clone(),
+                            self.dimensions,
+                            vulkano::format::D16Unorm,
+                        )
+                        .unwrap();
+
                     let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
                         vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
                             .add(multisampled_color.clone())
                             .unwrap()
                             .add(image.clone())
                             .unwrap()
-                             .build()
+                            .add(multisampled_depth.clone())
+                            .unwrap()
+                            .add(resolve_depth.clone())
+                            .unwrap()
+                            .build()
                             .unwrap(),
                     );
 
@@ -626,9 +650,18 @@ impl App {
                 .images
                 .iter()
                 .map(|image| {
+                    let depth_buffer = vulkano::image::attachment::AttachmentImage::transient(
+                        self.device.clone(),
+                        self.dimensions,
+                        vulkano::format::D16Unorm,
+                    )
+                    .unwrap();
+
                     let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
                         vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
                             .add(image.clone())
+                            .unwrap()
+                            .add(depth_buffer.clone())
                             .unwrap()
                             .build()
                             .unwrap(),
@@ -652,6 +685,7 @@ impl App {
                 .viewports_dynamic_scissors_irrelevant(1)
                 .fragment_shader(self.fragment_shader.main_entry_point(), ())
                 .render_pass(Subpass::from(self.renderpass.clone(), 0).unwrap())
+                .depth_stencil_simple_depth()
                 .build(self.device.clone())
                 .unwrap()
         );
@@ -858,11 +892,25 @@ fn create_available_renderpasses(device: Arc<Device>, format: vulkano::format::F
                     store: Store,
                     format: format,
                     samples: 1,
+                },
+                multisampled_depth: {
+                    load: Clear,
+                    store: DontCare,
+                    format: vulkano::format::Format::D16Unorm,
+                    samples: 4,
+                },
+                resolve_depth: {
+                    load: DontCare,
+                    store: DontCare,
+                    format: vulkano::format::Format::D16Unorm,
+                    samples: 1,
+                    initial_layout: ImageLayout::Undefined,
+                    final_layout: ImageLayout::DepthStencilAttachmentOptimal,
                 }
             },
             pass: {
                 color: [multisampled_color],
-                depth_stencil: {},
+                depth_stencil: {multisampled_depth},
                 resolve: [resolve_color]
             }
         ).unwrap()
@@ -877,11 +925,17 @@ fn create_available_renderpasses(device: Arc<Device>, format: vulkano::format::F
                     store: Store,
                     format: format,
                     samples: 1,
+                },
+                depth: {
+                    load: Clear,
+                    store: Store,
+                    format: vulkano::format::Format::D16Unorm,
+                    samples: 1,
                 }
             },
             pass: {
                 color: [color],
-                depth_stencil: {}
+                depth_stencil: {depth}
             }
         )
         .unwrap(),

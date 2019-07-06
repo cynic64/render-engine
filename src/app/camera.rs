@@ -19,7 +19,7 @@ impl Camera {
     pub fn default() -> Camera {
         let position = vec3(0.0, 0.0, 0.0);
         let pitch: f32 = 0.0;
-        let yaw: f32 = 0.0;
+        let yaw: f32 = std::f32::consts::PI / 2.0;
         let front = normalize(&vec3(
             pitch.cos() * yaw.cos(),
             pitch.sin(),
@@ -45,18 +45,25 @@ impl Camera {
     }
 
     pub fn get_view_matrix(&self) -> Mat4 {
-        look_at(&self.position, &(self.position + self.front), &self.up)
+        // for normal fly camera
+        // look_at(&self.position, &(self.position + self.front), &self.up)
+
+        // for orbit camera (orbits at 4 units away)
+        let farther_front = self.front * 4.0;
+        look_at(&(self.position + farther_front), &self.position, &self.up)
     }
 
     pub fn mouse_move(&mut self, x: f32, y: f32) {
         self.pitch += y * self.mouse_sens;
         self.yaw += x * self.mouse_sens;
         let halfpi = std::f32::consts::PI / 2.0;
+        let margin = 0.01;
+        let max_pitch = halfpi - margin;
 
-        if self.pitch > halfpi {
-            self.pitch = halfpi;
-        } else if self.pitch < -halfpi {
-            self.pitch = -halfpi;
+        if self.pitch > max_pitch {
+            self.pitch = max_pitch;
+        } else if self.pitch < -max_pitch {
+            self.pitch = -max_pitch;
         }
 
         self.update();
