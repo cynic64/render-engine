@@ -8,6 +8,9 @@ type ConcreteGraphicsPipeline = GraphicsPipeline<
     Arc<RenderPassAbstract + Send + Sync + 'static>,
 >;
 
+mod camera;
+use camera::Camera;
+
 pub struct App {
     instance: Arc<Instance>,
     pub events_loop: EventsLoop,
@@ -42,6 +45,7 @@ pub struct App {
     view: [[f32; 4]; 4],
     projection: glm::Mat4,
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
+    camera: Camera,
 }
 
 struct AvailableRenderPasses {
@@ -177,13 +181,9 @@ impl App {
         let vbuf_creator = VbufCreator::new(device.clone());
 
         // mvp
+        let camera = Camera::default();
         let model = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0));
-        let view: [[f32; 4]; 4] = {
-            let position = glm::vec3(2.0, 10.0, 2.0);
-            let up = glm::vec3(0.0, 1.0, 0.0);
-
-            glm::look_at(&position, &glm::vec3(0.0, 0.0, 0.0), &up).into()
-        };
+        let view: [[f32; 4]; 4] = camera.get_view_matrix().into();
         let projection = glm::perspective(
             // aspect ratio
             16. / 9.,
@@ -237,6 +237,7 @@ impl App {
             view,
             projection,
             uniform_buffer,
+            camera,
         }
     }
 
@@ -332,6 +333,12 @@ impl App {
         let mut done = false;
         let mut must_rebuild_swapchain = false;
         let mut unprocessed_events = vec![];
+        let mut x_movement = 0.0;
+        let mut y_movement = 0.0;
+
+        // for avoiding closure borrow problems
+        let dimensions = self.dimensions;
+
         self.events_loop.poll_events(|ev| match ev {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -341,6 +348,19 @@ impl App {
                 event: WindowEvent::Resized(_),
                 ..
             } => must_rebuild_swapchain = true,
+
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position: p, .. },
+                ..
+            } => {
+                let (x_diff, y_diff) = (
+                    p.x - (dimensions[0] as f64 / 2.0),
+                    p.y - (dimensions[1] as f64 / 2.0),
+                );
+                x_movement = x_diff as f32;
+                y_movement = y_diff as f32;
+            },
+
             Event::WindowEvent {
                 event: WindowEvent::KeyboardInput { .. },
                 ..
@@ -357,7 +377,18 @@ impl App {
             .iter()
             .for_each(|&keycode| self.unprocessed_events.push(keycode));
         self.must_rebuild_swapchain = must_rebuild_swapchain;
-        self.done = done
+        self.done = done;
+
+        // reset cursor and change camera view
+        self.surface
+            .window()
+            .set_cursor_position(winit::dpi::LogicalPosition {
+                x: self.dimensions[0] as f64 / 2.0,
+                y: self.dimensions[1] as f64 / 2.0,
+            })
+            .expect("Couldn't re-set cursor position!");
+        self.camera.mouse_move(x_movement as f32, y_movement as f32);
+        self.view = self.camera.get_view_matrix().into();
     }
 
     fn clear_unprocessed_events(&mut self) {
