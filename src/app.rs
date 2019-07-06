@@ -31,6 +31,9 @@ pub struct App {
     vbuf_creator: VbufCreator,
     swapchain_caps: vulkano::swapchain::Capabilities,
     image_format: vulkano::format::Format,
+    multisampling_enabled: bool,
+    vertex_shader: vs::Shader,
+    fragment_shader: fs::Shader,
 }
 
 struct FrameData {
@@ -78,6 +81,9 @@ impl App {
         let images = vec![];
         let must_rebuild_swapchain = true;
 
+        // the user can later enable multisampling with app.enable_multisampling()
+        let multisampling_enabled = false;
+
 
         // The next step is to create the shaders.
         //
@@ -87,38 +93,6 @@ impl App {
         // `vulkano-shaders` crate docs. You can view them at https://docs.rs/vulkano-shaders/
         //
         // TODO: explain this in details
-        mod vs {
-            vulkano_shaders::shader! {
-                ty: "vertex",
-                src: "
-#version 450
-
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec4 color;
-layout(location = 0) out vec4 v_color;
-
-void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
-    v_color = color;
-}"
-            }
-        }
-
-        mod fs {
-            vulkano_shaders::shader! {
-                ty: "fragment",
-                src: "
-#version 450
-
-layout(location = 0) in vec4 v_color;
-layout(location = 0) out vec4 f_color;
-
-void main() {
-    f_color = v_color;
-}
-"
-            }
-        }
 
         let vs = vs::Shader::load(device.clone()).unwrap();
         let fs = fs::Shader::load(device.clone()).unwrap();
@@ -139,13 +113,7 @@ void main() {
             vulkano::single_pass_renderpass!(
                 device.clone(),
                 attachments: {
-                    multisampled_color: {
-                        load: Clear,
-                        store: DontCare,
-                        format: image_format,
-                        samples: 4,
-                    },
-                    resolve_color: {
+                    color: {
                         load: Clear,
                         store: Store,
                         format: image_format,
@@ -154,10 +122,9 @@ void main() {
                 },
                 pass: {
                     // We use the attachment named `color` as the one and only color attachment.
-                    color: [multisampled_color],
+                    color: [color],
                     // No depth-stencil attachment is indicated with empty brackets.
-                    depth_stencil: {},
-                    resolve: [resolve_color],
+                    depth_stencil: {}
                 }
             )
             .unwrap(),
@@ -251,7 +218,93 @@ void main() {
             vbuf_creator,
             swapchain_caps,
             image_format,
+            multisampling_enabled,
+            vertex_shader: vs,
+            fragment_shader: fs,
         }
+    }
+
+    pub fn enable_multisampling(&mut self) {
+        self.multisampling_enabled = true;
+
+        self.update_dimensions();
+
+        self.render_pass = Arc::new(
+            vulkano::single_pass_renderpass!(
+                self.device.clone(),
+                attachments: {
+                    multisampled_color: {
+                        load: Clear,
+                        store: DontCare,
+                        format: self.image_format,
+                        samples: 4,
+                    },
+                    resolve_color: {
+                        load: Clear,
+                        store: Store,
+                        format: self.image_format,
+                        samples: 1,
+                    }
+                },
+                pass: {
+                    color: [multisampled_color],
+                    depth_stencil: {},
+                    resolve: [resolve_color]
+                }
+            ).unwrap()
+        );
+
+        self.pipeline = Arc::new(
+            GraphicsPipeline::start()
+                .vertex_input_single_buffer()
+                .vertex_shader(self.vertex_shader.main_entry_point(), ())
+                .triangle_list()
+                .viewports_dynamic_scissors_irrelevant(1)
+                .fragment_shader(self.fragment_shader.main_entry_point(), ())
+                .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
+                .build(self.device.clone())
+                .unwrap()
+        );
+
+        self.rebuild_swapchain();
+    }
+
+    pub fn disable_multisampling(&mut self) {
+        self.multisampling_enabled = false;
+
+        self.update_dimensions();
+
+        self.render_pass = Arc::new(
+            vulkano::single_pass_renderpass!(
+                self.device.clone(),
+                attachments: {
+                    color: {
+                        load: Clear,
+                        store: Store,
+                        format: self.image_format,
+                        samples: 1,
+                    }
+                },
+                pass: {
+                    color: [color],
+                    depth_stencil: {}
+                }
+            ).unwrap()
+        );
+
+        self.pipeline = Arc::new(
+            GraphicsPipeline::start()
+                .vertex_input_single_buffer()
+                .vertex_shader(self.vertex_shader.main_entry_point(), ())
+                .triangle_list()
+                .viewports_dynamic_scissors_irrelevant(1)
+                .fragment_shader(self.fragment_shader.main_entry_point(), ())
+                .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
+                .build(self.device.clone())
+                .unwrap()
+        );
+
+        self.rebuild_swapchain();
     }
 
     pub fn create_new_vbuf_creator(&self) -> VbufCreator {
@@ -363,7 +416,11 @@ void main() {
     }
 
     fn create_command_buffer(&mut self) {
-        let clear_values = vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into()];
+        let clear_values = if self.multisampling_enabled {
+            vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into()]
+        } else {
+            vec![[0.2, 0.2, 0.2, 1.0].into()]
+        };
 
         let mut command_buffer_unfinished = AutoCommandBufferBuilder::primary_one_time_submit(
             self.device.clone(),
@@ -536,32 +593,50 @@ void main() {
     }
 
     fn rebuild_framebuffers(&mut self) {
-        self.framebuffers = self
-            .images
-            .iter()
-            .map(|image| {
-                let multisampled_color =
-                    vulkano::image::attachment::AttachmentImage::transient_multisampled(
-                        self.device.clone(),
-                        self.dimensions,
-                        4,
-                        self.image_format,
-                    )
-                    .unwrap();
+        if self.multisampling_enabled {
+            self.framebuffers = self
+                .images
+                .iter()
+                .map(|image| {
+                    let multisampled_color =
+                        vulkano::image::attachment::AttachmentImage::transient_multisampled(
+                            self.device.clone(),
+                            self.dimensions,
+                            4,
+                            self.image_format,
+                        )
+                        .unwrap();
 
-                let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
-                    vulkano::framebuffer::Framebuffer::start(self.render_pass.clone())
-                        .add(multisampled_color.clone())
-                        .unwrap()
-                        .add(image.clone())
-                        .unwrap()
-                        .build()
-                        .unwrap(),
-                );
+                    let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
+                        vulkano::framebuffer::Framebuffer::start(self.render_pass.clone())
+                            .add(multisampled_color.clone())
+                            .unwrap()
+                            .add(image.clone())
+                            .unwrap()
+                            .build()
+                            .unwrap(),
+                    );
 
-                fba
-            })
-            .collect::<Vec<_>>();
+                    fba
+                })
+                .collect::<Vec<_>>();
+        } else {
+            self.framebuffers = self
+                .images
+                .iter()
+                .map(|image| {
+                    let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
+                        vulkano::framebuffer::Framebuffer::start(self.render_pass.clone())
+                            .add(image.clone())
+                            .unwrap()
+                            .build()
+                            .unwrap(),
+                    );
+
+                    fba
+                })
+                .collect::<Vec<_>>();
+        }
     }
 
     fn get_dimensions(&self) -> Option<[u32; 2]> {
@@ -746,5 +821,37 @@ fn create_swapchain_and_images_from_existing_swapchain(old_swapchain: Arc<Swapch
             None
         },
         Err(err) => panic!("{:?}", err),
+    }
+}
+mod vs {
+    vulkano_shaders::shader! {
+        ty: "vertex",
+        src: "
+            #version 450
+
+            layout(location = 0) in vec2 position;
+            layout(location = 1) in vec4 color;
+            layout(location = 0) out vec4 v_color;
+
+            void main() {
+                gl_Position = vec4(position, 0.0, 1.0);
+                v_color = color;
+            }"
+    }
+}
+
+mod fs {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        src: "
+            #version 450
+
+            layout(location = 0) in vec4 v_color;
+            layout(location = 0) out vec4 f_color;
+
+            void main() {
+                f_color = v_color;
+            }
+            "
     }
 }
