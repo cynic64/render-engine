@@ -1,3 +1,14 @@
+------
+Clean up namespaces, don't put everything in app (use sub-structs instead)
+Typedefs for things like the swapchain, images, swapchain-image-tuple, + more
+Figure out exactly how event handling should work. Clear it every frame? Clone it so the user can modify app without having to do annoying closure workarounds? and ofc provide all possiblities as options.
+Move -everything- that can possibly be simplified into functions, then wrappers around those functions from the app, then default function from the app that provide default values like 4x for MSAA and so on.
+A possible pattern to use:
+let mut pb = PipelineBuilder::default()
+pb.whatever = custom_setting()
+pb.build()
+------
+
 - first code a simple rotating textured cube or something, then make the corresponding library
 - then code what a basic 3D snake game should look like, then improve the corresponding library
 

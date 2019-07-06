@@ -15,7 +15,7 @@ pub struct App {
     queue: Arc<Queue>,
     swapchain: Option<Arc<Swapchain<Window>>>,
     images: Vec<Arc<SwapchainImage<Window>>>,
-    render_pass: Arc<RenderPassAbstract + Send + Sync>,
+    renderpass: Arc<RenderPassAbstract + Send + Sync>,
     pipeline: Arc<ConcreteGraphicsPipeline>,
     dynamic_state: DynamicState,
     framebuffers: Vec<Arc<FramebufferAbstract + Send + Sync>>,
@@ -34,6 +34,12 @@ pub struct App {
     multisampling_enabled: bool,
     vertex_shader: vs::Shader,
     fragment_shader: fs::Shader,
+    available_renderpasses: AvailableRenderPasses,
+}
+
+struct AvailableRenderPasses {
+    multisampled_renderpass: Arc<RenderPassAbstract + Send + Sync>,
+    standard_renderpass: Arc<RenderPassAbstract + Send + Sync>,
 }
 
 struct FrameData {
@@ -78,7 +84,6 @@ impl App {
         // the user can later enable multisampling with app.enable_multisampling()
         let multisampling_enabled = false;
 
-
         // The next step is to create the shaders.
         //
         // The raw shader creation API provided by the vulkano library is unsafe, for various reasons.
@@ -100,29 +105,11 @@ impl App {
         let image_format = swapchain_caps.supported_formats[0].0;
         let dimensions = swapchain_caps.current_extent.unwrap_or([1024, 768]);
 
-        // The next step is to create a *render pass*, which is an object that describes where the
-        // output of the graphics pipeline will go. It describes the layout of the images
-        // where the colors, depth and/or stencil information will be written.
-        let render_pass: Arc<RenderPassAbstract + Send + Sync> = Arc::new(
-            vulkano::single_pass_renderpass!(
-                device.clone(),
-                attachments: {
-                    color: {
-                        load: Clear,
-                        store: Store,
-                        format: image_format,
-                        samples: 1,
-                    }
-                },
-                pass: {
-                    // We use the attachment named `color` as the one and only color attachment.
-                    color: [color],
-                    // No depth-stencil attachment is indicated with empty brackets.
-                    depth_stencil: {}
-                }
-            )
-            .unwrap(),
-        );
+        let available_renderpasses = create_available_renderpasses(device.clone(), image_format);
+
+        // default to using the standard renderpass. The only other option (for now)
+        // is the multisampled one.
+        let renderpass = available_renderpasses.standard_renderpass.clone();
 
         // Before we draw we have to create what is called a pipeline. This is similar to an OpenGL
         // program, but much more specific.
@@ -144,7 +131,7 @@ impl App {
                 .fragment_shader(fs.main_entry_point(), ())
                 // We have to indicate which subpass of which render pass this pipeline is going to be used
                 // in. The pipeline will only be usable from this particular subpass.
-                .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+                .render_pass(Subpass::from(renderpass.clone(), 0).unwrap())
                 // Now that our builder is filled, we call `build()` to obtain an actual pipeline.
                 .build(device.clone())
                 .unwrap(),
@@ -192,7 +179,7 @@ impl App {
             queue,
             swapchain,
             images,
-            render_pass,
+            renderpass,
             pipeline,
             dynamic_state,
             framebuffers,
@@ -215,89 +202,23 @@ impl App {
             multisampling_enabled,
             vertex_shader: vs,
             fragment_shader: fs,
+            available_renderpasses,
         }
     }
 
     pub fn enable_multisampling(&mut self) {
         self.multisampling_enabled = true;
-
         self.update_dimensions();
-
-        self.render_pass = Arc::new(
-            vulkano::single_pass_renderpass!(
-                self.device.clone(),
-                attachments: {
-                    multisampled_color: {
-                        load: Clear,
-                        store: DontCare,
-                        format: self.image_format,
-                        samples: 4,
-                    },
-                    resolve_color: {
-                        load: Clear,
-                        store: Store,
-                        format: self.image_format,
-                        samples: 1,
-                    }
-                },
-                pass: {
-                    color: [multisampled_color],
-                    depth_stencil: {},
-                    resolve: [resolve_color]
-                }
-            ).unwrap()
-        );
-
-        self.pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input_single_buffer()
-                .vertex_shader(self.vertex_shader.main_entry_point(), ())
-                .triangle_list()
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(self.fragment_shader.main_entry_point(), ())
-                .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
-                .build(self.device.clone())
-                .unwrap()
-        );
-
+        self.renderpass = self.available_renderpasses.multisampled_renderpass.clone();
+        self.rebuild_pipeline();
         self.rebuild_swapchain();
     }
 
     pub fn disable_multisampling(&mut self) {
         self.multisampling_enabled = false;
-
         self.update_dimensions();
-
-        self.render_pass = Arc::new(
-            vulkano::single_pass_renderpass!(
-                self.device.clone(),
-                attachments: {
-                    color: {
-                        load: Clear,
-                        store: Store,
-                        format: self.image_format,
-                        samples: 1,
-                    }
-                },
-                pass: {
-                    color: [color],
-                    depth_stencil: {}
-                }
-            ).unwrap()
-        );
-
-        self.pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input_single_buffer()
-                .vertex_shader(self.vertex_shader.main_entry_point(), ())
-                .triangle_list()
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(self.fragment_shader.main_entry_point(), ())
-                .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
-                .build(self.device.clone())
-                .unwrap()
-        );
-
+        self.renderpass = self.available_renderpasses.standard_renderpass.clone();
+        self.rebuild_pipeline();
         self.rebuild_swapchain();
     }
 
@@ -432,7 +353,7 @@ impl App {
             self.framebuffers[self.frame_data.image_num.expect(
                 "
 ---------------------------------------------------------------------------------------------
-    [create_command_buffer]    (begin_render_pass)
+    [create_command_buffer]    (begin_renderpass)
 ->  When trying to create the command buffer, found that frame_data.image_num is None.
 ->  Maybe acquire_next_image was not called.
 ---------------------------------------------------------------------------------------------
@@ -602,12 +523,12 @@ impl App {
                         .unwrap();
 
                     let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
-                        vulkano::framebuffer::Framebuffer::start(self.render_pass.clone())
+                        vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
                             .add(multisampled_color.clone())
                             .unwrap()
                             .add(image.clone())
                             .unwrap()
-                            .build()
+                             .build()
                             .unwrap(),
                     );
 
@@ -620,7 +541,7 @@ impl App {
                 .iter()
                 .map(|image| {
                     let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
-                        vulkano::framebuffer::Framebuffer::start(self.render_pass.clone())
+                        vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
                             .add(image.clone())
                             .unwrap()
                             .build()
@@ -631,6 +552,23 @@ impl App {
                 })
                 .collect::<Vec<_>>();
         }
+    }
+
+    fn rebuild_pipeline(&mut self) {
+        // the purpose of this function is to be called after the render pass or another
+        // parameter for the graphics pipeline is changed, and the pipeline must be
+        // rebuilt.
+        self.pipeline = Arc::new(
+            GraphicsPipeline::start()
+                .vertex_input_single_buffer()
+                .vertex_shader(self.vertex_shader.main_entry_point(), ())
+                .triangle_list()
+                .viewports_dynamic_scissors_irrelevant(1)
+                .fragment_shader(self.fragment_shader.main_entry_point(), ())
+                .render_pass(Subpass::from(self.renderpass.clone(), 0).unwrap())
+                .build(self.device.clone())
+                .unwrap()
+        );
     }
 
     fn get_dimensions(&self) -> Option<[u32; 2]> {
@@ -817,6 +755,58 @@ fn create_swapchain_and_images_from_existing_swapchain(old_swapchain: Arc<Swapch
         Err(err) => panic!("{:?}", err),
     }
 }
+
+fn create_available_renderpasses(device: Arc<Device>, format: vulkano::format::Format) -> AvailableRenderPasses {
+    let multisampled_renderpass = Arc::new(
+        vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                multisampled_color: {
+                    load: Clear,
+                    store: DontCare,
+                    format: format,
+                    samples: 4,
+                },
+                resolve_color: {
+                    load: Clear,
+                    store: Store,
+                    format: format,
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [multisampled_color],
+                depth_stencil: {},
+                resolve: [resolve_color]
+            }
+        ).unwrap()
+    );
+
+    let standard_renderpass: Arc<RenderPassAbstract + Send + Sync> = Arc::new(
+        vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                color: {
+                    load: Clear,
+                    store: Store,
+                    format: format,
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {}
+            }
+        )
+        .unwrap(),
+    );
+
+    AvailableRenderPasses {
+        multisampled_renderpass,
+        standard_renderpass,
+    }
+}
+
 mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
