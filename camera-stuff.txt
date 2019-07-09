@@ -45,3 +45,5 @@
 - testing flexibility:
     - implement FROM AN EXTERNAL PROGRAM a camera that changes fov based on mouse movement or scrolling or something
     - also implement
+
+add a CameraBuilder with stuff like "with_sens", "with_movespeed", etc.

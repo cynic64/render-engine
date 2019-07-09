@@ -8,7 +8,7 @@ type ConcreteGraphicsPipeline = GraphicsPipeline<
     Arc<RenderPassAbstract + Send + Sync + 'static>,
 >;
 
-mod camera;
+pub mod camera;
 
 pub struct App {
     instance: Arc<Instance>,
@@ -30,7 +30,11 @@ pub struct App {
     vertex_buffers: Vec<Arc<VertexBuffer>>,
     frame_data: FrameData,
     pub unprocessed_events: Vec<Event>,
-    pub unprocessed_keyboard_events: Vec<VirtualKeyCode>,
+    pub unprocessed_keydown_events: Vec<VirtualKeyCode>,
+    pub unprocessed_keyup_events: Vec<VirtualKeyCode>,
+    pub keys_down: KeysDown,
+    pub delta: f32,
+    last_frame_time: std::time::Instant,
     start_time: std::time::Instant,
     frames_drawn: u32,
     vbuf_creator: VbufCreator,
@@ -45,7 +49,7 @@ pub struct App {
     view: [[f32; 4]; 4],
     projection: glm::Mat4,
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
-    camera: Box<InputHandlingCamera>,
+    pub camera: Box<InputHandlingCamera>,
 }
 
 struct AvailableRenderPasses {
@@ -183,7 +187,7 @@ impl App {
         let vbuf_creator = VbufCreator::new(device.clone());
 
         // mvp
-        let camera = camera::OrbitCamera::default();
+        let camera = camera::FlyCamera::default();
         let model = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0));
         let view: [[f32; 4]; 4] = camera.get_view_matrix().into();
         let projection = glm::perspective(
@@ -201,6 +205,8 @@ impl App {
             device.clone(),
             vulkano::buffer::BufferUsage::all(),
         );
+
+        let keys_down = KeysDown::all_false();
 
         App {
             instance: instance.clone(),
@@ -221,7 +227,11 @@ impl App {
             dimensions: [0, 0],
             vertex_buffers: vec![],
             unprocessed_events: vec![],
-            unprocessed_keyboard_events: vec![],
+            unprocessed_keydown_events: vec![],
+            unprocessed_keyup_events: vec![],
+            keys_down,
+            delta: 0.0,
+            last_frame_time: std::time::Instant::now(),
             frame_data: FrameData {
                 image_num: None,
                 acquire_future: None,
@@ -281,7 +291,9 @@ impl App {
         self.create_command_buffer();
         self.submit_and_check();
 
+        self.delta = get_elapsed(self.last_frame_time);
         self.handle_input();
+        self.last_frame_time = std::time::Instant::now();
         self.frames_drawn += 1;
     }
 
@@ -335,7 +347,8 @@ impl App {
     pub fn handle_input(&mut self) {
         let mut done = false;
         let mut must_rebuild_swapchain = false;
-        let mut unprocessed_keyboard_events = vec![];
+        let mut unprocessed_keydown_events = vec![];
+        let mut unprocessed_keyup_events = vec![];
         let mut unprocessed_events = vec![];
 
         self.events_loop.poll_events(|ev| {
@@ -353,8 +366,20 @@ impl App {
                     event: WindowEvent::KeyboardInput { .. },
                     ..
                 } => {
-                    if let Some(keycode) = winit_event_to_keycode(&ev) {
-                        unprocessed_keyboard_events.push(keycode);
+                    if let Some(keyboard_input) = winit_event_to_keycode(&ev) {
+                        match keyboard_input {
+                            KeyboardInput {
+                                virtual_keycode: Some(key),
+                                state: winit::ElementState::Pressed,
+                                ..
+                            } => unprocessed_keydown_events.push(key),
+                            KeyboardInput {
+                                virtual_keycode: Some(key),
+                                state: winit::ElementState::Released,
+                                ..
+                            } => unprocessed_keyup_events.push(key),
+                            _ => {}
+                        }
                     }
                 }
                 _ => {}
@@ -363,9 +388,75 @@ impl App {
         });
 
         // for avoiding problems with borrow checker
-        unprocessed_keyboard_events
-            .iter()
-            .for_each(|&keycode| self.unprocessed_keyboard_events.push(keycode));
+        // append all new keydown events to the list, as well as updating keys_down
+        unprocessed_keydown_events.iter().for_each(|&keycode| {
+            self.unprocessed_keydown_events.push(keycode);
+            // yeah, this sucks
+            // a possible solution: make keys_down a list of VirtualKeyCodes instead
+            match keycode {
+                VirtualKeyCode::A => self.keys_down.a = true,
+                VirtualKeyCode::B => self.keys_down.b = true,
+                VirtualKeyCode::C => self.keys_down.c = true,
+                VirtualKeyCode::D => self.keys_down.d = true,
+                VirtualKeyCode::E => self.keys_down.e = true,
+                VirtualKeyCode::F => self.keys_down.f = true,
+                VirtualKeyCode::G => self.keys_down.g = true,
+                VirtualKeyCode::H => self.keys_down.h = true,
+                VirtualKeyCode::I => self.keys_down.i = true,
+                VirtualKeyCode::J => self.keys_down.j = true,
+                VirtualKeyCode::K => self.keys_down.k = true,
+                VirtualKeyCode::L => self.keys_down.l = true,
+                VirtualKeyCode::M => self.keys_down.m = true,
+                VirtualKeyCode::N => self.keys_down.n = true,
+                VirtualKeyCode::O => self.keys_down.o = true,
+                VirtualKeyCode::P => self.keys_down.p = true,
+                VirtualKeyCode::Q => self.keys_down.q = true,
+                VirtualKeyCode::R => self.keys_down.r = true,
+                VirtualKeyCode::S => self.keys_down.s = true,
+                VirtualKeyCode::T => self.keys_down.t = true,
+                VirtualKeyCode::U => self.keys_down.u = true,
+                VirtualKeyCode::V => self.keys_down.v = true,
+                VirtualKeyCode::W => self.keys_down.w = true,
+                VirtualKeyCode::X => self.keys_down.x = true,
+                VirtualKeyCode::Y => self.keys_down.y = true,
+                VirtualKeyCode::Z => self.keys_down.z = true,
+                _ => {}
+            }
+        });
+        unprocessed_keyup_events.iter().for_each(|&keycode| {
+            self.unprocessed_keyup_events.push(keycode);
+            // yeah, this sucks
+            // a possible solution: make keys_down a list of VirtualKeyCodes instead
+            match keycode {
+                VirtualKeyCode::A => self.keys_down.a = false,
+                VirtualKeyCode::B => self.keys_down.b = false,
+                VirtualKeyCode::C => self.keys_down.c = false,
+                VirtualKeyCode::D => self.keys_down.d = false,
+                VirtualKeyCode::E => self.keys_down.e = false,
+                VirtualKeyCode::F => self.keys_down.f = false,
+                VirtualKeyCode::G => self.keys_down.g = false,
+                VirtualKeyCode::H => self.keys_down.h = false,
+                VirtualKeyCode::I => self.keys_down.i = false,
+                VirtualKeyCode::J => self.keys_down.j = false,
+                VirtualKeyCode::K => self.keys_down.k = false,
+                VirtualKeyCode::L => self.keys_down.l = false,
+                VirtualKeyCode::M => self.keys_down.m = false,
+                VirtualKeyCode::N => self.keys_down.n = false,
+                VirtualKeyCode::O => self.keys_down.o = false,
+                VirtualKeyCode::P => self.keys_down.p = false,
+                VirtualKeyCode::Q => self.keys_down.q = false,
+                VirtualKeyCode::R => self.keys_down.r = false,
+                VirtualKeyCode::S => self.keys_down.s = false,
+                VirtualKeyCode::T => self.keys_down.t = false,
+                VirtualKeyCode::U => self.keys_down.u = false,
+                VirtualKeyCode::V => self.keys_down.v = false,
+                VirtualKeyCode::W => self.keys_down.w = false,
+                VirtualKeyCode::X => self.keys_down.x = false,
+                VirtualKeyCode::Y => self.keys_down.y = false,
+                VirtualKeyCode::Z => self.keys_down.z = false,
+                _ => {}
+            }
+        });
         self.must_rebuild_swapchain = must_rebuild_swapchain;
         self.done = done;
 
@@ -378,7 +469,8 @@ impl App {
             })
             .expect("Couldn't re-set cursor position!");
 
-        self.camera.handle_input(&unprocessed_events.clone());
+        self.camera
+            .handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
         self.view = self.camera.get_view_matrix().into();
 
         self.unprocessed_events = unprocessed_events;
@@ -386,7 +478,7 @@ impl App {
 
     fn clear_unprocessed_events(&mut self) {
         self.unprocessed_events = vec![];
-        self.unprocessed_keyboard_events = vec![];
+        self.unprocessed_keydown_events = vec![];
     }
 
     fn create_command_buffer(&mut self) {

@@ -23,23 +23,18 @@ pub use std::sync::Arc;
 
 use super::*;
 
-pub fn winit_event_to_keycode(event: &Event) -> Option<VirtualKeyCode> {
-    // only matches keydown events
+pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {
+    // only matches key press/release events
     if let Event::WindowEvent {
-        event:
-            WindowEvent::KeyboardInput {
-                input:
-                    winit::KeyboardInput {
-                        virtual_keycode: Some(key),
-                        state: winit::ElementState::Pressed,
-                        ..
-                    },
-                ..
-            },
+        event: WindowEvent::KeyboardInput { input, .. },
         ..
     } = event
     {
-        Some(*key)
+        if input.virtual_keycode.is_some() {
+            Some(*input)
+        } else {
+            None
+        }
     } else {
         None
     }
