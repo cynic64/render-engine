@@ -9,7 +9,6 @@ type ConcreteGraphicsPipeline = GraphicsPipeline<
 >;
 
 mod camera;
-use camera::Camera;
 
 pub struct App {
     instance: Arc<Instance>,
@@ -30,7 +29,8 @@ pub struct App {
     pub dimensions: [u32; 2],
     vertex_buffers: Vec<Arc<VertexBuffer>>,
     frame_data: FrameData,
-    pub unprocessed_events: Vec<VirtualKeyCode>,
+    pub unprocessed_events: Vec<Event>,
+    pub unprocessed_keyboard_events: Vec<VirtualKeyCode>,
     start_time: std::time::Instant,
     frames_drawn: u32,
     vbuf_creator: VbufCreator,
@@ -45,7 +45,7 @@ pub struct App {
     view: [[f32; 4]; 4],
     projection: glm::Mat4,
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
-    camera: Camera,
+    camera: Box<InputHandlingCamera>,
 }
 
 struct AvailableRenderPasses {
@@ -159,8 +159,7 @@ impl App {
         };
         let dynamic_state = DynamicState {
             line_width: None,
-            viewports: Some(
-                vec![viewport]),
+            viewports: Some(vec![viewport]),
             scissors: None,
         };
 
@@ -184,7 +183,7 @@ impl App {
         let vbuf_creator = VbufCreator::new(device.clone());
 
         // mvp
-        let camera = Camera::default();
+        let camera = camera::OrbitCamera::default();
         let model = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0));
         let view: [[f32; 4]; 4] = camera.get_view_matrix().into();
         let projection = glm::perspective(
@@ -222,6 +221,7 @@ impl App {
             dimensions: [0, 0],
             vertex_buffers: vec![],
             unprocessed_events: vec![],
+            unprocessed_keyboard_events: vec![],
             frame_data: FrameData {
                 image_num: None,
                 acquire_future: None,
@@ -240,7 +240,7 @@ impl App {
             view,
             projection,
             uniform_buffer,
-            camera,
+            camera: Box::new(camera),
         }
     }
 
@@ -335,50 +335,37 @@ impl App {
     pub fn handle_input(&mut self) {
         let mut done = false;
         let mut must_rebuild_swapchain = false;
+        let mut unprocessed_keyboard_events = vec![];
         let mut unprocessed_events = vec![];
-        let mut x_movement = 0.0;
-        let mut y_movement = 0.0;
 
-        // for avoiding closure borrow problems
-        let dimensions = self.dimensions;
+        self.events_loop.poll_events(|ev| {
+            match ev.clone() {
+                Event::WindowEvent {
+                    event: WindowEvent::CloseRequested,
+                    ..
+                } => done = true,
+                Event::WindowEvent {
+                    event: WindowEvent::Resized(_),
+                    ..
+                } => must_rebuild_swapchain = true,
 
-        self.events_loop.poll_events(|ev| match ev {
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => done = true,
-            Event::WindowEvent {
-                event: WindowEvent::Resized(_),
-                ..
-            } => must_rebuild_swapchain = true,
-
-            Event::WindowEvent {
-                event: WindowEvent::CursorMoved { position: p, .. },
-                ..
-            } => {
-                let (x_diff, y_diff) = (
-                    p.x - (dimensions[0] as f64 / 2.0),
-                    p.y - (dimensions[1] as f64 / 2.0),
-                );
-                x_movement = x_diff as f32;
-                y_movement = y_diff as f32;
-            },
-
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { .. },
-                ..
-            } => {
-                if let Some(keycode) = winit_event_to_keycode(ev) {
-                    unprocessed_events.push(keycode);
+                Event::WindowEvent {
+                    event: WindowEvent::KeyboardInput { .. },
+                    ..
+                } => {
+                    if let Some(keycode) = winit_event_to_keycode(&ev) {
+                        unprocessed_keyboard_events.push(keycode);
+                    }
                 }
-            }
-            _ => (),
+                _ => {}
+            };
+            unprocessed_events.push(ev.clone());
         });
 
         // for avoiding problems with borrow checker
-        unprocessed_events
+        unprocessed_keyboard_events
             .iter()
-            .for_each(|&keycode| self.unprocessed_events.push(keycode));
+            .for_each(|&keycode| self.unprocessed_keyboard_events.push(keycode));
         self.must_rebuild_swapchain = must_rebuild_swapchain;
         self.done = done;
 
@@ -386,16 +373,20 @@ impl App {
         self.surface
             .window()
             .set_cursor_position(winit::dpi::LogicalPosition {
-                x: self.dimensions[0] as f64 / 2.0,
-                y: self.dimensions[1] as f64 / 2.0,
+                x: CURSOR_RESET_POS_X as f64,
+                y: CURSOR_RESET_POS_Y as f64,
             })
             .expect("Couldn't re-set cursor position!");
-        self.camera.mouse_move(x_movement as f32, y_movement as f32);
+
+        self.camera.handle_input(&unprocessed_events.clone());
         self.view = self.camera.get_view_matrix().into();
+
+        self.unprocessed_events = unprocessed_events;
     }
 
     fn clear_unprocessed_events(&mut self) {
         self.unprocessed_events = vec![];
+        self.unprocessed_keyboard_events = vec![];
     }
 
     fn create_command_buffer(&mut self) {
@@ -421,7 +412,12 @@ impl App {
         );
 
         let clear_values = if self.multisampling_enabled {
-            vec![[0.2, 0.2, 0.2, 1.0].into(), [0.2, 0.2, 0.2, 1.0].into(), 1f32.into(), vulkano::format::ClearValue::None]
+            vec![
+                [0.2, 0.2, 0.2, 1.0].into(),
+                [0.2, 0.2, 0.2, 1.0].into(),
+                1f32.into(),
+                vulkano::format::ClearValue::None,
+            ]
         } else {
             vec![[0.2, 0.2, 0.2, 1.0].into(), 1f32.into()]
         };
@@ -521,8 +517,10 @@ impl App {
             // the GPU has finished executing the command buffer that draws the triangle.
             .then_swapchain_present(
                 self.queue.clone(),
-                self.swapchain.as_ref().expect(
-                    "
+                self.swapchain
+                    .as_ref()
+                    .expect(
+                        "
 ---------------------------------------------------------------------------------------------
     [submit_and_check]    (then_swapchain_present)
 -> When trying to submit the command buffer and present it to the swapchain, found that
@@ -530,7 +528,9 @@ impl App {
 -> Unless you're trying to something really weird, the internal implementation probably
 -> fucked up, because this shouldn't happen.
 ---------------------------------------------------------------------------------------------
-                    ").clone(),
+                    ",
+                    )
+                    .clone(),
                 self.frame_data.image_num.expect(
                     "
 ---------------------------------------------------------------------------------------------
@@ -568,14 +568,11 @@ impl App {
     }
 
     fn rebuild_swapchain(&mut self) {
-        self.dynamic_state.viewports = Some(
-            vec![
-                Viewport {
-                    origin: [0.0, 0.0],
-                    dimensions: [self.dimensions[0] as f32, self.dimensions[1] as f32],
-                    depth_range: 0.0..1.0,
-                },
-            ]);
+        self.dynamic_state.viewports = Some(vec![Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [self.dimensions[0] as f32, self.dimensions[1] as f32],
+            depth_range: 0.0..1.0,
+        }]);
 
         let tuple = match &self.swapchain {
             // the swapchain already exists and is just out of date, meaning we can
@@ -620,27 +617,27 @@ impl App {
                         )
                         .unwrap();
 
-                    let resolve_depth =
-                        vulkano::image::attachment::AttachmentImage::transient(
-                            self.device.clone(),
-                            self.dimensions,
-                            vulkano::format::D16Unorm,
-                        )
-                        .unwrap();
+                    let resolve_depth = vulkano::image::attachment::AttachmentImage::transient(
+                        self.device.clone(),
+                        self.dimensions,
+                        vulkano::format::D16Unorm,
+                    )
+                    .unwrap();
 
-                    let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
-                        vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
-                            .add(multisampled_color.clone())
-                            .unwrap()
-                            .add(image.clone())
-                            .unwrap()
-                            .add(multisampled_depth.clone())
-                            .unwrap()
-                            .add(resolve_depth.clone())
-                            .unwrap()
-                            .build()
-                            .unwrap(),
-                    );
+                    let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> =
+                        Arc::new(
+                            vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
+                                .add(multisampled_color.clone())
+                                .unwrap()
+                                .add(image.clone())
+                                .unwrap()
+                                .add(multisampled_depth.clone())
+                                .unwrap()
+                                .add(resolve_depth.clone())
+                                .unwrap()
+                                .build()
+                                .unwrap(),
+                        );
 
                     fba
                 })
@@ -657,15 +654,16 @@ impl App {
                     )
                     .unwrap();
 
-                    let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> = Arc::new(
-                        vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
-                            .add(image.clone())
-                            .unwrap()
-                            .add(depth_buffer.clone())
-                            .unwrap()
-                            .build()
-                            .unwrap(),
-                    );
+                    let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> =
+                        Arc::new(
+                            vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
+                                .add(image.clone())
+                                .unwrap()
+                                .add(depth_buffer.clone())
+                                .unwrap()
+                                .build()
+                                .unwrap(),
+                        );
 
                     fba
                 })
@@ -687,7 +685,7 @@ impl App {
                 .render_pass(Subpass::from(self.renderpass.clone(), 0).unwrap())
                 .depth_stencil_simple_depth()
                 .build(self.device.clone())
-                .unwrap()
+                .unwrap(),
         );
     }
 
@@ -710,32 +708,43 @@ impl App {
     }
 
     fn acquire_next_image(&mut self) {
-        let (image_num, acquire_future) =
-            match swapchain::acquire_next_image(self.swapchain.as_ref().expect(
-                "
+        let (image_num, acquire_future) = match swapchain::acquire_next_image(
+            self.swapchain
+                .as_ref()
+                .expect(
+                    "
 ---------------------------------------------------------------------------------------------
     [acquire_next_image]    (self.swapchain.expect)
 -> When trying to acquire the next image, found that the swapchain does not exist.
 -> Unless you're trying to something really weird, the internal implementation probably
 -> fucked up, because this shouldn't happen.
 ---------------------------------------------------------------------------------------------
-                ").clone(), None) {
-                Ok(r) => r,
-                Err(AcquireError::OutOfDate) => {
-                    println!("Swapchain out of date when trying to acquire next image");
-                    self.must_rebuild_swapchain = true;
-                    return;
-                }
-                Err(err) => panic!("{:?}", err),
-            };
+                ",
+                )
+                .clone(),
+            None,
+        ) {
+            Ok(r) => r,
+            Err(AcquireError::OutOfDate) => {
+                println!("Swapchain out of date when trying to acquire next image");
+                self.must_rebuild_swapchain = true;
+                return;
+            }
+            Err(err) => panic!("{:?}", err),
+        };
 
         self.frame_data.image_num = Some(image_num);
         self.frame_data.acquire_future = Some(acquire_future);
     }
 
-    fn create_swapchain_and_images_from_existing_swapchain(&mut self) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
-        let swapchain = self.swapchain.as_ref().expect(
-            "
+    fn create_swapchain_and_images_from_existing_swapchain(
+        &mut self,
+    ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+        let swapchain = self
+            .swapchain
+            .as_ref()
+            .expect(
+                "
 ---------------------------------------------------------------------------------------------
     [create_swapchain_and_images_from_existing_swapchain]    (self.swapchain.expect)
 -> When creating a new swapchain from an existing one (usually done because of a window
@@ -743,19 +752,25 @@ impl App {
 -> from somewhere where the app had no existing swapchain. Use
 -> create_swapchain_and_images_from_scratch for that.
 ---------------------------------------------------------------------------------------------
-            ")
+            ",
+            )
             .clone();
 
         let mut last_result = None;
         while last_result.is_none() {
             self.update_dimensions();
-            last_result = create_swapchain_and_images_from_existing_swapchain(swapchain.clone(), self.dimensions);
-        };
+            last_result = create_swapchain_and_images_from_existing_swapchain(
+                swapchain.clone(),
+                self.dimensions,
+            );
+        }
 
         last_result.unwrap()
     }
 
-    fn create_swapchain_and_images_from_scratch(&self) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+    fn create_swapchain_and_images_from_scratch(
+        &self,
+    ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
         match Swapchain::new(
             self.device.clone(),
             self.surface.clone(),
@@ -767,13 +782,11 @@ impl App {
             &self.queue,
             SurfaceTransform::Identity,
             self.swapchain_caps.supported_composite_alpha.iter().next().unwrap(),
-            PresentMode::Fifo,
+            PresentMode::Immediate,
             true,
             None,
         ) {
             Ok(r) => r,
-            // This error tends to happen when the user is manually resizing the window.
-            // Simply restarting the loop is the easiest way to fix this issue.
             Err(SwapchainCreationError::UnsupportedDimensions) => panic!("SwapchainCreationError::UnsupportedDimensions when creating initial swapchain. Should never happen."),
             Err(err) => panic!("{:?}", err),
         }
@@ -864,19 +877,25 @@ fn get_device_and_queues(
     .unwrap()
 }
 
-fn create_swapchain_and_images_from_existing_swapchain(old_swapchain: Arc<Swapchain<Window>>, dimensions: [u32; 2]) -> Option<(Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>)> {
+fn create_swapchain_and_images_from_existing_swapchain(
+    old_swapchain: Arc<Swapchain<Window>>,
+    dimensions: [u32; 2],
+) -> Option<(Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>)> {
     match old_swapchain.recreate_with_dimension(dimensions) {
         Ok(r) => Some(r),
         Err(SwapchainCreationError::UnsupportedDimensions) => {
             // this happens sometimes :\
             println!("Unsupported dimensions: {:?}", dimensions);
             None
-        },
+        }
         Err(err) => panic!("{:?}", err),
     }
 }
 
-fn create_available_renderpasses(device: Arc<Device>, format: vulkano::format::Format) -> AvailableRenderPasses {
+fn create_available_renderpasses(
+    device: Arc<Device>,
+    format: vulkano::format::Format,
+) -> AvailableRenderPasses {
     let multisampled_renderpass = Arc::new(
         vulkano::single_pass_renderpass!(
             device.clone(),
@@ -913,7 +932,8 @@ fn create_available_renderpasses(device: Arc<Device>, format: vulkano::format::F
                 depth_stencil: {multisampled_depth},
                 resolve: [resolve_color]
             }
-        ).unwrap()
+        )
+        .unwrap(),
     );
 
     let standard_renderpass: Arc<RenderPassAbstract + Send + Sync> = Arc::new(

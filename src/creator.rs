@@ -7,9 +7,7 @@ pub struct VbufCreator {
 
 impl VbufCreator {
     pub fn new(device: Arc<Device>) -> Self {
-        VbufCreator {
-            device,
-        }
+        VbufCreator { device }
     }
 
     pub fn create_vbuf_from_verts(&self, verts: &[Vertex]) -> Arc<VertexBuffer> {

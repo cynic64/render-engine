@@ -23,7 +23,7 @@ pub use std::sync::Arc;
 
 use super::*;
 
-pub fn winit_event_to_keycode(event: Event) -> Option<VirtualKeyCode> {
+pub fn winit_event_to_keycode(event: &Event) -> Option<VirtualKeyCode> {
     // only matches keydown events
     if let Event::WindowEvent {
         event:
@@ -39,7 +39,26 @@ pub fn winit_event_to_keycode(event: Event) -> Option<VirtualKeyCode> {
         ..
     } = event
     {
-        Some(key)
+        Some(*key)
+    } else {
+        None
+    }
+}
+
+pub fn winit_event_to_mouse_movement(event: &Event) -> Option<(f32, f32)> {
+    if let Event::WindowEvent {
+        event: WindowEvent::CursorMoved { position: p, .. },
+        ..
+    } = event
+    {
+        let (x_diff, y_diff) = (
+            p.x - (CURSOR_RESET_POS_X as f64),
+            p.y - (CURSOR_RESET_POS_Y as f64),
+        );
+        let x_movement = x_diff as f32;
+        let y_movement = y_diff as f32;
+
+        Some((x_movement, y_movement))
     } else {
         None
     }

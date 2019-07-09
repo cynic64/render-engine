@@ -2,7 +2,9 @@ extern crate nalgebra_glm as glm;
 
 use self::glm::*;
 
-pub struct Camera {
+use super::*;
+
+pub struct OrbitCamera {
     pub position: Vec3,
     pub front: Vec3,
     up: Vec3,
@@ -15,8 +17,8 @@ pub struct Camera {
     mouse_sens: f32,
 }
 
-impl Camera {
-    pub fn default() -> Camera {
+impl OrbitCamera {
+    pub fn default() -> Self {
         let position = vec3(0.0, 0.0, 0.0);
         let pitch: f32 = 0.0;
         let yaw: f32 = std::f32::consts::PI / 2.0;
@@ -31,7 +33,7 @@ impl Camera {
         let movement_speed = 20.0;
         let mouse_sens = 0.0007;
 
-        Camera {
+        OrbitCamera {
             position,
             front,
             up,
@@ -44,44 +46,19 @@ impl Camera {
         }
     }
 
-    pub fn get_view_matrix(&self) -> Mat4 {
-        // for normal fly camera
-        // look_at(&self.position, &(self.position + self.front), &self.up)
-
-        // for orbit camera (orbits at 4 units away)
-        let farther_front = self.front * 4.0;
-        look_at(&(self.position + farther_front), &self.position, &self.up)
-    }
-
-    pub fn mouse_move(&mut self, x: f32, y: f32) {
-        self.pitch += y * self.mouse_sens;
-        self.yaw += x * self.mouse_sens;
-        let halfpi = std::f32::consts::PI / 2.0;
-        let margin = 0.01;
-        let max_pitch = halfpi - margin;
-
-        if self.pitch > max_pitch {
-            self.pitch = max_pitch;
-        } else if self.pitch < -max_pitch {
-            self.pitch = -max_pitch;
-        }
-
-        self.update();
-    }
-
-    pub fn move_forward(&mut self, delta: f32) {
+    pub fn _move_forward(&mut self, delta: f32) {
         self.position += self.front * self.movement_speed * delta;
     }
 
-    pub fn move_backward(&mut self, delta: f32) {
+    pub fn _move_backward(&mut self, delta: f32) {
         self.position -= self.front * self.movement_speed * delta;
     }
 
-    pub fn move_left(&mut self, delta: f32) {
+    pub fn _move_left(&mut self, delta: f32) {
         self.position -= self.right * self.movement_speed * delta;
     }
 
-    pub fn move_right(&mut self, delta: f32) {
+    pub fn _move_right(&mut self, delta: f32) {
         self.position += self.right * self.movement_speed * delta;
     }
 
@@ -93,5 +70,38 @@ impl Camera {
         ));
 
         self.right = normalize(&glm::Vec3::cross(&self.front, &self.world_up));
+    }
+}
+
+impl InputHandlingCamera for OrbitCamera {
+    fn get_view_matrix(&self) -> [[f32; 4]; 4] {
+        // for normal fly camera
+        // look_at(&self.position, &(self.position + self.front), &self.up)
+
+        // for orbit camera (orbits at 4 units away)
+        let farther_front = self.front * 4.0;
+        look_at(&(self.position + farther_front), &self.position, &self.up).into()
+    }
+
+    fn handle_input(&mut self, events: &[Event]) {
+        events.iter().for_each(|ev| {
+            if let Some(mouse_movement) = winit_event_to_mouse_movement(ev) {
+                let (x, y) = mouse_movement;
+
+                self.pitch += y * self.mouse_sens;
+                self.yaw += x * self.mouse_sens;
+                let halfpi = std::f32::consts::PI / 2.0;
+                let margin = 0.01;
+                let max_pitch = halfpi - margin;
+
+                if self.pitch > max_pitch {
+                    self.pitch = max_pitch;
+                } else if self.pitch < -max_pitch {
+                    self.pitch = -max_pitch;
+                }
+
+                self.update();
+            }
+        });
     }
 }

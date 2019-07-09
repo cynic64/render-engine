@@ -1,0 +1,47 @@
+*** this is a *scratch* buffer which won't be automatically saved ***
+*** use it for notes or open a file buffer with the :edit command ***
+
+- Adding a camera requires these things:
+    - adding a uniform thingy to the vertex shader for the mvp
+        - maybe just use an mvp by default because it's necessary for any 3d program
+            - 2d programs can either use their own vertex shader and remove the uniform buffer if performance
+                is a must, or just use identity matrices.
+    - having some way of getting the view matrix every time it changes (sth happens to the camera)
+    - having some way of changing the camera based on user input
+        - idea: let it somehow hook into handle_input and capture any events it wants to to be as flexible as possible.
+            - maybe the camera can define a closure that is called on every event to determine whether to pass it on to the
+                camera or not
+        - another idea: just clone unprocessed_events and send that to the camera every frame
+        - the user also needs to be able to communicate with the camera easily from the main loop
+            - maybe make it easy to use channels by adding a requirement for a check_for_messages function that will be
+                called every frame.
+        - another idea: combine the user being able to communicate with the camera and processing events
+            by moving the logic for changing the camera into the user's main loop (if they choose to
+            implement their own) by making -everything- be handled by message passing. For example, camera thread
+            is spawned, user presses D, event is processed in main loop, messages are sent accross channel like
+            CameraInstruction::Movement::Right
+            - if this is done, make sure events the camera can't process are made visible to the user.
+                - for example: if the camera is an orbit camera and the user passes "move_right", that's not good.
+            - if we are using a render-engine provided implementation of a camera, handle_input needs to take
+                care of this.
+
+- Types of cameras that -need- to be supported:
+    - orthographic
+    - standard perspective (fly camera)
+    - orbit
+
+- How to support custom cameras:
+    - let the user provide a camera struct that implements either:
+        - BasicCamera, requiring
+            - get_view_matrix()
+        - InputHandlingCamera, requiring
+            - get_view_matrix()
+            - handle_input(events), taking a cloned event list
+        - ProjectionInputHandlingCamera, requiring
+            - get_view_matrix()
+            - get_projection_matrix()
+            - handle_input(events)
+
+- testing flexibility:
+    - implement FROM AN EXTERNAL PROGRAM a camera that changes fov based on mouse movement or scrolling or something
+    - also implement

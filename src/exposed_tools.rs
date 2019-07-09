@@ -1,5 +1,9 @@
 use super::*;
+pub use winit::Event;
 pub use winit::VirtualKeyCode;
+
+pub const CURSOR_RESET_POS_X: u32 = 50;
+pub const CURSOR_RESET_POS_Y: u32 = 50;
 
 pub type VertexBuffer = CpuAccessibleBuffer<[Vertex]>;
 
@@ -59,4 +63,14 @@ impl Square {
             .map(|&idx| app.vert_from_pixel_coords(&points[idx], self.color))
             .collect()
     }
+}
+
+// traits
+pub trait BasicCamera {
+    fn get_view_matrix(&self) -> [[f32; 4]; 4];
+}
+
+pub trait InputHandlingCamera {
+    fn get_view_matrix(&self) -> [[f32; 4]; 4];
+    fn handle_input(&mut self, events: &[Event]);
 }

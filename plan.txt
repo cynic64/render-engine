@@ -5,7 +5,7 @@ Figure out exactly how event handling should work. Clear it every frame? Clone i
 Move -everything- that can possibly be simplified into functions, then wrappers around those functions from the app, then default function from the app that provide default values like 4x for MSAA and so on.
     A possible pattern to use:
     let mut pb = PipelineBuilder::default()
-    pb.whatever = custom_setting()
+    pb.whatever = custom_setting
     pb.build()
 
 try and figure out a way to split out some dependencies. For example, not everyone needs nalgebra for an MVP if they are only doing 2D graphics
@@ -14,6 +14,14 @@ run clippy
 channels for lots of things. For example, for the camera, add a multiple-sender-single-reciever channel for a thread that constantly runs.
     anybody can clone the sender and send instructions (from an enum), like CameraInstruction::MoveForward
 make sure users can use their own version of stuff. if they want their own camera, make that possible.
+make sure frame delays don't build up. Say something is using channels to send information. If there is a 1-frame delay on those
+    messages being processed, and they do sth else that is delayed, it will become a big problem at 60 fps.
+    to test it send some messages (for example move camera right), record the timestamp of the message being sent,
+        and record the timestamp of the action being taken and compare the difference
+figure out why fifo delays input so much
+    - asynchronously call draw_frame?
+    - maybe spawn a second thread that just runs submit_and_check over and over and use channels to send the cmd
+        buffer to it and everything
 ------
 
 - first code a simple rotating textured cube or something, then make the corresponding library
