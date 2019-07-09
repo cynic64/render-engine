@@ -189,7 +189,7 @@ impl App {
         // mvp
         let camera = camera::FlyCamera::default();
         let model = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0));
-        let view: [[f32; 4]; 4] = camera.get_view_matrix().into();
+        let view: [[f32; 4]; 4] = camera.get_view_matrix();
         let projection = glm::perspective(
             // aspect ratio
             16. / 9.,
@@ -471,7 +471,7 @@ impl App {
 
         self.camera
             .handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
-        self.view = self.camera.get_view_matrix().into();
+        self.view = self.camera.get_view_matrix();
 
         self.unprocessed_events = unprocessed_events;
     }
@@ -666,18 +666,15 @@ impl App {
             depth_range: 0.0..1.0,
         }]);
 
-        let tuple = match &self.swapchain {
+        let swapchain_and_images = match &self.swapchain {
             // the swapchain already exists and is just out of date, meaning we can
             // re-build the old one rather than making a whole new one.
             Some(_swapchain) => self.create_swapchain_and_images_from_existing_swapchain(),
             None => self.create_swapchain_and_images_from_scratch(),
         };
 
-        let new_swapchain: Arc<Swapchain<Window>> = tuple.0;
-        let new_images: Vec<Arc<SwapchainImage<Window>>> = tuple.1;
-
-        self.swapchain = Some(new_swapchain);
-        self.images = new_images;
+        self.swapchain = Some(swapchain_and_images.swapchain);
+        self.images = swapchain_and_images.images;
 
         // Because framebuffers contains an Arc on the old swapchain, we need to
         // recreate framebuffers as well.
@@ -831,7 +828,7 @@ impl App {
 
     fn create_swapchain_and_images_from_existing_swapchain(
         &mut self,
-    ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+    ) -> SwapchainAndImages {
         let swapchain = self
             .swapchain
             .as_ref()
@@ -862,7 +859,7 @@ impl App {
 
     fn create_swapchain_and_images_from_scratch(
         &self,
-    ) -> (Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>) {
+    ) -> SwapchainAndImages {
         match Swapchain::new(
             self.device.clone(),
             self.surface.clone(),
@@ -878,10 +875,21 @@ impl App {
             true,
             None,
         ) {
-            Ok(r) => r,
+            Ok(r) => {
+                SwapchainAndImages {
+                    swapchain: r.0,
+                    images: r.1,
+                }
+            },
             Err(SwapchainCreationError::UnsupportedDimensions) => panic!("SwapchainCreationError::UnsupportedDimensions when creating initial swapchain. Should never happen."),
             Err(err) => panic!("{:?}", err),
         }
+    }
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -972,9 +980,15 @@ fn get_device_and_queues(
 fn create_swapchain_and_images_from_existing_swapchain(
     old_swapchain: Arc<Swapchain<Window>>,
     dimensions: [u32; 2],
-) -> Option<(Arc<Swapchain<Window>>, Vec<Arc<SwapchainImage<Window>>>)> {
+) -> Option<SwapchainAndImages> {
     match old_swapchain.recreate_with_dimension(dimensions) {
-        Ok(r) => Some(r),
+        Ok(r) => {
+            let swapchain_and_images = SwapchainAndImages {
+                swapchain: r.0,
+                images: r.1,
+            };
+            Some(swapchain_and_images)
+        },
         Err(SwapchainCreationError::UnsupportedDimensions) => {
             // this happens sometimes :\
             println!("Unsupported dimensions: {:?}", dimensions);

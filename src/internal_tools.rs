@@ -23,6 +23,11 @@ pub use std::sync::Arc;
 
 use super::*;
 
+pub struct SwapchainAndImages {
+    pub swapchain: Arc<Swapchain<Window>>,
+    pub images: Vec<Arc<SwapchainImage<Window>>>,
+}
+
 pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {
     // only matches key press/release events
     if let Event::WindowEvent {
