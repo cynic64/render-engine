@@ -1,6 +1,7 @@
 extern crate nalgebra_glm as glm;
 
 use self::glm::*;
+
 use crate::exposed_tools::*;
 
 pub struct OrbitCamera {
@@ -30,7 +31,7 @@ impl OrbitCamera {
         let world_up = vec3(0.0, 1.0, 0.0);
         let mouse_sens = 0.0007;
 
-        OrbitCamera {
+        Self {
             center_position,
             front,
             up,
@@ -117,7 +118,7 @@ impl FlyCamera {
         let movement_speed = 20.0;
         let mouse_sens = 0.0007;
 
-        FlyCamera {
+        Self {
             position,
             front,
             up,

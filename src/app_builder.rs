@@ -1,7 +1,8 @@
 use crate::app::App;
+use crate::exposed_tools::*;
 
 pub struct AppBuilder {
-    app: Option<App>,
+    app: App,
 }
 
 impl AppBuilder {
@@ -9,11 +10,21 @@ impl AppBuilder {
         let app = App::new();
 
         AppBuilder {
-            app: Some(app),
+            app: app,
         }
     }
 
-    pub fn build(&mut self) -> App {
-        self.app.take().unwrap()
+    pub fn with_multisampling(mut self) -> Self {
+        self.app.enable_multisampling();
+        self
+    }
+
+    pub fn with_camera(mut self, camera: Box<Camera>) -> Self {
+        self.app.camera = camera;
+        self
+    }
+
+    pub fn build(self) -> App {
+        self.app
     }
 }
