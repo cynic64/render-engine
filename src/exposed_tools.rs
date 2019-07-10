@@ -1,8 +1,8 @@
 use super::*;
+pub use winit;
 pub use winit::Event;
 pub use winit::KeyboardInput;
 pub use winit::VirtualKeyCode;
-pub use winit;
 
 pub const CURSOR_RESET_POS_X: u32 = 50;
 pub const CURSOR_RESET_POS_Y: u32 = 50;
@@ -150,12 +150,12 @@ pub trait Camera {
             0.1,
             // far
             100_000_000.,
-        ).into()
+        )
+        .into()
     }
 
     #[allow(unused_variables)]
-    fn handle_input(&mut self, events: &[Event], keys_down: &KeysDown, delta: f32) {
-    }
+    fn handle_input(&mut self, events: &[Event], keys_down: &KeysDown, delta: f32) {}
 }
 
 pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {

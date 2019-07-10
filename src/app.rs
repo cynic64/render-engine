@@ -188,7 +188,8 @@ impl App {
 
         // mvp
         let camera = camera::FlyCamera::default();
-        let model: CameraMatrix = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
+        let model: CameraMatrix =
+            glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
         let view: CameraMatrix = camera.get_view_matrix();
         let projection: CameraMatrix = camera.get_projection_matrix();
 
@@ -460,7 +461,8 @@ impl App {
             })
             .expect("Couldn't re-set cursor position!");
 
-        self.camera.handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
+        self.camera
+            .handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
         self.view = self.camera.get_view_matrix();
         self.projection = self.camera.get_projection_matrix();
 
@@ -817,9 +819,7 @@ impl App {
         self.frame_data.acquire_future = Some(acquire_future);
     }
 
-    fn create_swapchain_and_images_from_existing_swapchain(
-        &mut self,
-    ) -> SwapchainAndImages {
+    fn create_swapchain_and_images_from_existing_swapchain(&mut self) -> SwapchainAndImages {
         let swapchain = self
             .swapchain
             .as_ref()
@@ -848,9 +848,7 @@ impl App {
         last_result.unwrap()
     }
 
-    fn create_swapchain_and_images_from_scratch(
-        &self,
-    ) -> SwapchainAndImages {
+    fn create_swapchain_and_images_from_scratch(&self) -> SwapchainAndImages {
         match Swapchain::new(
             self.device.clone(),
             self.surface.clone(),
@@ -979,7 +977,7 @@ fn create_swapchain_and_images_from_existing_swapchain(
                 images: r.1,
             };
             Some(swapchain_and_images)
-        },
+        }
         Err(SwapchainCreationError::UnsupportedDimensions) => {
             // this happens sometimes :\
             println!("Unsupported dimensions: {:?}", dimensions);
