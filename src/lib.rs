@@ -2,6 +2,7 @@ pub mod exposed_tools;
 use exposed_tools::*;
 
 pub mod app;
+pub mod camera;
 
 mod internal_tools;
 use internal_tools::*;

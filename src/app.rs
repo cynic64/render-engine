@@ -8,11 +8,9 @@ type ConcreteGraphicsPipeline = GraphicsPipeline<
     Arc<RenderPassAbstract + Send + Sync + 'static>,
 >;
 
-pub mod camera;
-
 pub struct App {
     instance: Arc<Instance>,
-    pub events_loop: EventsLoop,
+    events_loop: EventsLoop,
     surface: Arc<Surface<Window>>,
     physical_device_index: usize,
     device: Arc<Device>,
