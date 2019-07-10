@@ -2,11 +2,17 @@ use super::*;
 pub use winit::Event;
 pub use winit::KeyboardInput;
 pub use winit::VirtualKeyCode;
+pub use winit;
 
 pub const CURSOR_RESET_POS_X: u32 = 50;
 pub const CURSOR_RESET_POS_Y: u32 = 50;
 
 pub type VertexBuffer = CpuAccessibleBuffer<[Vertex]>;
+
+extern crate nalgebra_glm as glm;
+use glm::*;
+
+pub type CameraMatrix = [[f32; 4]; 4];
 
 #[derive(Clone)]
 pub struct KeysDown {
@@ -129,12 +135,61 @@ impl KeysDown {
     }
 }
 
-// traits
-pub trait BasicCamera {
-    fn get_view_matrix(&self) -> [[f32; 4]; 4];
+pub trait Camera {
+    fn get_view_matrix(&self) -> CameraMatrix {
+        Mat4::identity().into()
+    }
+
+    fn get_projection_matrix(&self) -> CameraMatrix {
+        glm::perspective(
+            // aspect ratio
+            16. / 9.,
+            // fov
+            1.0,
+            // near
+            0.1,
+            // far
+            100_000_000.,
+        ).into()
+    }
+
+    #[allow(unused_variables)]
+    fn handle_input(&mut self, events: &[Event], keys_down: &KeysDown, delta: f32) {
+    }
 }
 
-pub trait InputHandlingCamera {
-    fn get_view_matrix(&self) -> [[f32; 4]; 4];
-    fn handle_input(&mut self, events: &[Event], keys_down: &KeysDown, delta: f32);
+pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {
+    // only matches key press/release events
+    if let Event::WindowEvent {
+        event: WindowEvent::KeyboardInput { input, .. },
+        ..
+    } = event
+    {
+        if input.virtual_keycode.is_some() {
+            Some(*input)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+pub fn winit_event_to_mouse_movement(event: &Event) -> Option<(f32, f32)> {
+    if let Event::WindowEvent {
+        event: WindowEvent::CursorMoved { position: p, .. },
+        ..
+    } = event
+    {
+        let (x_diff, y_diff) = (
+            p.x - (CURSOR_RESET_POS_X as f64),
+            p.y - (CURSOR_RESET_POS_Y as f64),
+        );
+        let x_movement = x_diff as f32;
+        let y_movement = y_diff as f32;
+
+        Some((x_movement, y_movement))
+    } else {
+        None
+    }
 }

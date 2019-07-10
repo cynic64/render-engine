@@ -54,7 +54,7 @@ impl OrbitCamera {
     }
 }
 
-impl InputHandlingCamera for OrbitCamera {
+impl Camera for OrbitCamera {
     fn get_view_matrix(&self) -> [[f32; 4]; 4] {
         // orbits at 4 units away
         let farther_front = self.front * 4.0;
@@ -158,7 +158,7 @@ impl FlyCamera {
     }
 }
 
-impl InputHandlingCamera for FlyCamera {
+impl Camera for FlyCamera {
     fn get_view_matrix(&self) -> [[f32; 4]; 4] {
         // for normal fly camera
         look_at(&self.position, &(self.position + self.front), &self.up).into()

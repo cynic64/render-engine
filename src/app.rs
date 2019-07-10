@@ -45,11 +45,11 @@ pub struct App {
     fragment_shader: fs::Shader,
     available_renderpasses: AvailableRenderPasses,
     // MVP
-    model: glm::Mat4,
-    view: [[f32; 4]; 4],
-    projection: glm::Mat4,
+    model: CameraMatrix,
+    view: CameraMatrix,
+    projection: CameraMatrix,
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
-    pub camera: Box<InputHandlingCamera>,
+    pub camera: Box<Camera>,
 }
 
 struct AvailableRenderPasses {
@@ -188,18 +188,9 @@ impl App {
 
         // mvp
         let camera = camera::FlyCamera::default();
-        let model = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0));
-        let view: [[f32; 4]; 4] = camera.get_view_matrix();
-        let projection = glm::perspective(
-            // aspect ratio
-            16. / 9.,
-            // fov
-            1.0,
-            // near
-            0.1,
-            // far
-            100_000_000.,
-        );
+        let model: CameraMatrix = glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
+        let view: CameraMatrix = camera.get_view_matrix();
+        let projection: CameraMatrix = camera.get_projection_matrix();
 
         let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(
             device.clone(),
@@ -469,9 +460,9 @@ impl App {
             })
             .expect("Couldn't re-set cursor position!");
 
-        self.camera
-            .handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
+        self.camera.handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
         self.view = self.camera.get_view_matrix();
+        self.projection = self.camera.get_projection_matrix();
 
         self.unprocessed_events = unprocessed_events;
     }
@@ -484,9 +475,9 @@ impl App {
     fn create_command_buffer(&mut self) {
         let uniform_buffer_subbuffer = {
             let uniform_data = vs::ty::Data {
-                world: self.model.into(),
+                world: self.model,
                 view: self.view,
-                proj: self.projection.into(),
+                proj: self.projection,
             };
 
             self.uniform_buffer.next(uniform_data).unwrap()
