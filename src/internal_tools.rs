@@ -21,8 +21,6 @@ pub use winit::{Event, EventsLoop, Window, WindowBuilder, WindowEvent};
 
 pub use std::sync::Arc;
 
-use super::*;
-
 pub struct SwapchainAndImages {
     pub swapchain: Arc<Swapchain<Window>>,
     pub images: Vec<Arc<SwapchainImage<Window>>>,

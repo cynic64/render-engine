@@ -1,6 +1,9 @@
-use super::*;
-
 extern crate nalgebra_glm as glm;
+
+use crate::internal_tools::*;
+use crate::exposed_tools::*;
+use crate::creator::*;
+use crate::camera::*;
 
 type ConcreteGraphicsPipeline = GraphicsPipeline<
     SingleBufferDefinition<Vertex>,
@@ -185,7 +188,7 @@ impl App {
         let vbuf_creator = VbufCreator::new(device.clone());
 
         // mvp
-        let camera = camera::FlyCamera::default();
+        let camera = FlyCamera::default();
         let model: CameraMatrix =
             glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
         let view: CameraMatrix = camera.get_view_matrix();
@@ -285,18 +288,6 @@ impl App {
         self.handle_input();
         self.last_frame_time = std::time::Instant::now();
         self.frames_drawn += 1;
-    }
-
-    pub fn vert_from_pixel_coords(&self, pixel: &PixelCoord, color: [f32; 4]) -> Vertex {
-        // to convert pixel to screen coordinate (-1..1), divide by resolution (-1..1) -> (0..1),
-        // multiply by 2 (0..1) -> (0..2) and subtract 1 (0..2) -> (-1..1)
-        let screen_x = (pixel.x as f32) / (self.dimensions[0] as f32) * 2.0 - 1.0;
-        let screen_y = (pixel.y as f32) / (self.dimensions[1] as f32) * 2.0 - 1.0;
-
-        Vertex {
-            position: [screen_x, screen_y, 0.0],
-            color,
-        }
     }
 
     pub fn print_fps(&self) {

@@ -1,8 +1,9 @@
-use super::*;
 pub use winit;
 pub use winit::Event;
 pub use winit::KeyboardInput;
 pub use winit::VirtualKeyCode;
+
+use crate::internal_tools::*;
 
 pub const CURSOR_RESET_POS_X: u32 = 50;
 pub const CURSOR_RESET_POS_Y: u32 = 50;
@@ -57,49 +58,8 @@ pub struct Vertex {
     pub color: [f32; 4],
 }
 
-pub struct PixelCoord {
-    pub x: u32,
-    pub y: u32,
-}
-
 pub fn get_elapsed(start: std::time::Instant) -> f32 {
     start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0
-}
-
-pub struct Square {
-    pub corner: PixelCoord,
-    pub size: u32,
-    pub color: [f32; 4],
-}
-
-impl Square {
-    pub fn create_vertices(&self, app: &app::App) -> Vec<Vertex> {
-        let points = [
-            PixelCoord {
-                x: self.corner.x,
-                y: self.corner.y,
-            },
-            PixelCoord {
-                x: self.corner.x + self.size,
-                y: self.corner.y,
-            },
-            PixelCoord {
-                x: self.corner.x,
-                y: self.corner.y + self.size,
-            },
-            PixelCoord {
-                x: self.corner.x + self.size,
-                y: self.corner.y + self.size,
-            },
-        ];
-
-        let indices = [0, 1, 2, 1, 2, 3];
-
-        indices
-            .iter()
-            .map(|&idx| app.vert_from_pixel_coords(&points[idx], self.color))
-            .collect()
-    }
 }
 
 impl KeysDown {

@@ -1,8 +1,7 @@
 extern crate nalgebra_glm as glm;
 
 use self::glm::*;
-
-use super::*;
+use crate::exposed_tools::*;
 
 pub struct OrbitCamera {
     pub center_position: Vec3,
