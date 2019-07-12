@@ -1057,9 +1057,9 @@ mod vs {
             #version 450
 
             layout(location = 0) in vec3 position;
-            layout(location = 1) in vec4 color;
+            layout(location = 1) in vec3 color;
             layout(location = 2) in vec3 normal;
-            layout(location = 0) out vec4 v_color;
+            layout(location = 0) out vec3 v_color;
             layout(location = 1) out vec3 v_normal;
 
             layout(set = 0, binding = 0) uniform Data {
@@ -1083,7 +1083,7 @@ mod fs {
         src: "
             #version 450
 
-            layout(location = 0) in vec4 v_color;
+            layout(location = 0) in vec3 v_color;
             layout(location = 1) in vec3 v_normal;
             layout(location = 0) out vec4 f_color;
 
@@ -1091,8 +1091,8 @@ mod fs {
 
             void main() {
                 float brightness = dot(normalize(v_normal), normalize(LIGHT));
-                vec3 dark_color = v_color.xyz * 0.6;
-                vec3 regular_color = v_color.xyz;
+                vec3 dark_color = v_color * 0.6;
+                vec3 regular_color = v_color;
 
                 f_color = vec4(mix(dark_color, regular_color, brightness), 1.0);
             }
