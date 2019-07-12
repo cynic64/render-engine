@@ -9,6 +9,6 @@ pub use app_builder::AppBuilder;
 
 mod internal_tools;
 
-vulkano::impl_vertex!(Vertex, position, color);
+vulkano::impl_vertex!(Vertex, position, color, normal);
 
 pub mod creator;

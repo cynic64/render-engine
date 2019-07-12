@@ -56,6 +56,7 @@ pub enum KeyboardEventType {
 pub struct Vertex {
     pub position: [f32; 3],
     pub color: [f32; 4],
+    pub normal: [f32; 3],
 }
 
 pub fn get_elapsed(start: std::time::Instant) -> f32 {

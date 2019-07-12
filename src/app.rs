@@ -529,7 +529,6 @@ impl App {
             // We are now inside the first subpass of the render pass. We add a draw command.
             //
             // The last two parameters contain the list of resources to pass to the shaders.
-            // Since we used an `EmptyPipeline` object, the objects have to be `()`.
             command_buffer_unfinished = command_buffer_unfinished
                 .draw(
                     self.pipeline.clone(),
@@ -1059,7 +1058,9 @@ mod vs {
 
             layout(location = 0) in vec3 position;
             layout(location = 1) in vec4 color;
+            layout(location = 2) in vec3 normal;
             layout(location = 0) out vec4 v_color;
+            layout(location = 1) out vec3 v_normal;
 
             layout(set = 0, binding = 0) uniform Data {
                 mat4 world;
@@ -1071,6 +1072,7 @@ mod vs {
                 mat4 worldview = uniforms.view * uniforms.world;
                 gl_Position = uniforms.proj * worldview * vec4(position, 1.0);
                 v_color = color;
+                v_normal = normal;
             }"
     }
 }
@@ -1082,10 +1084,17 @@ mod fs {
             #version 450
 
             layout(location = 0) in vec4 v_color;
+            layout(location = 1) in vec3 v_normal;
             layout(location = 0) out vec4 f_color;
 
+            const vec3 LIGHT = vec3(3.0, 2.0, 1.0);
+
             void main() {
-                f_color = v_color;
+                float brightness = dot(normalize(v_normal), normalize(LIGHT));
+                vec3 dark_color = v_color.xyz * 0.6;
+                vec3 regular_color = v_color.xyz;
+
+                f_color = vec4(mix(dark_color, regular_color, brightness), 1.0);
             }
             "
     }

@@ -1,3 +1,5 @@
+Need more modularity
+    World makes it easier to create vertices and shaders (meshes and materials)
 ------
 Clean up namespaces, don't put everything in app (use sub-structs instead)
 Typedefs for things like the swapchain, images, swapchain-image-tuple, + more
