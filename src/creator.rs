@@ -11,6 +11,10 @@ impl VbufCreator {
         VbufCreator { device }
     }
 
+    pub fn duplicate(&self) -> Self {
+        VbufCreator { device: self.device.clone() }
+    }
+
     pub fn create_vbuf_from_verts(&self, verts: &[Vertex]) -> Arc<VertexBuffer> {
         CpuAccessibleBuffer::from_iter(
             self.device.clone(),

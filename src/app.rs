@@ -247,6 +247,10 @@ impl App {
         }
     }
 
+    pub fn set_vertex_buffers(&mut self, vertex_buffers: Vec<Arc<VertexBuffer>>) {
+        self.vertex_buffers = vertex_buffers;
+    }
+
     pub fn enable_multisampling(&mut self) {
         self.multisampling_enabled = true;
         self.update_dimensions();
