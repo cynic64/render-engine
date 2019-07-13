@@ -1,9 +1,9 @@
 extern crate nalgebra_glm as glm;
 
-use crate::internal_tools::*;
-use crate::exposed_tools::*;
-use crate::creator::*;
 use crate::camera::*;
+use crate::creator::*;
+use crate::exposed_tools::*;
+use crate::internal_tools::*;
 
 type ConcreteGraphicsPipeline = GraphicsPipeline<
     SingleBufferDefinition<Vertex>,

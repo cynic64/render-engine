@@ -1,10 +1,10 @@
-use crate::internal_tools::*;
-use crate::exposed_tools::*;
 use crate::creator::VbufCreator;
+use crate::exposed_tools::*;
+use crate::internal_tools::*;
 
 use std::collections::HashMap;
 use std::sync::mpsc;
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Receiver, Sender};
 
 pub struct Object {
     vbuf: Arc<VertexBuffer>,
@@ -26,17 +26,9 @@ pub struct WorldCommunicator {
 }
 
 pub enum Command {
-    ObjectFromVbuf {
-        id: String,
-        vbuf: Arc<VertexBuffer>,
-    },
-    ObjectFromVerts {
-        id: String,
-        verts: Vec<Vertex>,
-    },
-    DeleteObject {
-        id: String,
-    },
+    ObjectFromVbuf { id: String, vbuf: Arc<VertexBuffer> },
+    ObjectFromVerts { id: String, verts: Vec<Vertex> },
+    DeleteObject { id: String },
 }
 
 impl World {
@@ -56,24 +48,23 @@ impl World {
     }
 
     pub fn add_object_from_vbuf(&mut self, id: String, vbuf: Arc<VertexBuffer>) {
-        let new_object = Object {
-            vbuf,
-        };
+        let new_object = Object { vbuf };
 
         self.objects.insert(id, new_object);
     }
 
     pub fn add_object_from_verts(&mut self, id: String, verts: Vec<Vertex>) {
         let vbuf = self.vbuf_creator.create_vbuf_from_verts(&verts);
-        let new_object = Object {
-            vbuf,
-        };
+        let new_object = Object { vbuf };
 
         self.objects.insert(id, new_object);
     }
 
     pub fn get_vbufs(&self) -> Vec<Arc<VertexBuffer>> {
-        self.objects.values().map(|object| object.vbuf.clone()).collect()
+        self.objects
+            .values()
+            .map(|object| object.vbuf.clone())
+            .collect()
     }
 
     pub fn delete_object(&mut self, id: String) {
@@ -84,9 +75,9 @@ impl World {
         let command_recv = self.command_recv.take().unwrap();
 
         command_recv.try_iter().for_each(|command| match command {
-            Command::ObjectFromVbuf {id, vbuf} => self.add_object_from_vbuf(id, vbuf),
-            Command::ObjectFromVerts {id, verts} => self.add_object_from_verts(id, verts),
-            Command::DeleteObject {id} => self.delete_object(id),
+            Command::ObjectFromVbuf { id, vbuf } => self.add_object_from_vbuf(id, vbuf),
+            Command::ObjectFromVerts { id, verts } => self.add_object_from_verts(id, verts),
+            Command::DeleteObject { id } => self.delete_object(id),
         });
 
         self.command_recv = Some(command_recv);
@@ -101,27 +92,19 @@ impl WorldCommunicator {
     }
 
     pub fn add_object_from_vbuf(&mut self, id: String, vbuf: Arc<VertexBuffer>) {
-        let command = Command::ObjectFromVbuf{
-            id,
-            vbuf,
-        };
+        let command = Command::ObjectFromVbuf { id, vbuf };
 
         self.command_send.send(command).unwrap();
     }
 
     pub fn add_object_from_verts(&mut self, id: String, verts: Vec<Vertex>) {
-        let command = Command::ObjectFromVerts {
-            id,
-            verts,
-        };
+        let command = Command::ObjectFromVerts { id, verts };
 
         self.command_send.send(command).unwrap();
     }
 
     pub fn delete_object(&mut self, id: String) {
-        let command = Command::DeleteObject {
-            id,
-        };
+        let command = Command::DeleteObject { id };
 
         self.command_send.send(command).unwrap();
     }

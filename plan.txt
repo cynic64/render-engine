@@ -1,3 +1,18 @@
+even more plans:
+- low-level module: only functions, all taking loads of arguments n stuff
+
+the interesting bits of the program are:
+    - deciding what to do: whether to draw to an image, a winit window, etc.
+    - creating the render pass
+    - deciding the type of the vertex buffer and which shaders are to be used
+    - creating the pipeline
+    - handling input (i like the current system a lot)
+    - creating the command buffer
+
+drawing to a window and an image might be similar enough that generic code can be used for both.
+compute shaders, however, are so different that a different system should be used for them entirely.
+
+------
 Need more modularity
     World makes it easier to create vertices and shaders (meshes and materials)
 ------

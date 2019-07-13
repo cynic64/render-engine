@@ -1,5 +1,5 @@
-use crate::internal_tools::*;
 use crate::exposed_tools::*;
+use crate::internal_tools::*;
 
 #[derive(Clone)]
 pub struct VbufCreator {
@@ -12,7 +12,9 @@ impl VbufCreator {
     }
 
     pub fn duplicate(&self) -> Self {
-        VbufCreator { device: self.device.clone() }
+        VbufCreator {
+            device: self.device.clone(),
+        }
     }
 
     pub fn create_vbuf_from_verts(&self, verts: &[Vertex]) -> Arc<VertexBuffer> {
