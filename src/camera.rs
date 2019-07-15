@@ -201,3 +201,19 @@ impl Camera for FlyCamera {
         }
     }
 }
+
+pub struct OrthoCamera {
+}
+
+impl Camera for OrthoCamera {
+    fn get_view_matrix(&self) -> [[f32; 4]; 4] {
+        Mat4::identity().into()
+    }
+
+    fn get_projection_matrix(&self) -> [[f32; 4]; 4] {
+        Mat4::identity().into()
+    }
+
+    fn handle_input(&mut self, _events: &[Event], _keys_down: &KeysDown, _delta: f32) {
+    }
+}
