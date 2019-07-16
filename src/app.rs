@@ -2,6 +2,7 @@ extern crate nalgebra_glm as glm;
 
 use crate::camera::*;
 use crate::creator::*;
+use crate::world::*;
 use crate::exposed_tools::*;
 use crate::internal_tools::*;
 
@@ -51,6 +52,7 @@ pub struct App {
     projection: CameraMatrix,
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
     pub camera: Box<Camera>,
+    world: Option<World>,
 }
 
 struct AvailableRenderPasses {
@@ -244,7 +246,12 @@ impl App {
             projection,
             uniform_buffer,
             camera: Box::new(camera),
+            world: None,
         }
+    }
+
+    pub fn add_world(&mut self, world: World) {
+        self.world = Some(world);
     }
 
     pub fn set_vertex_buffers(&mut self, vertex_buffers: Vec<Arc<VertexBuffer>>) {
@@ -284,6 +291,7 @@ impl App {
     pub fn draw_frame(&mut self) {
         self.clear_unprocessed_events();
         self.setup_frame();
+        self.update_world();
 
         self.create_command_buffer();
         self.submit_and_check();
@@ -292,6 +300,14 @@ impl App {
         self.handle_input();
         self.last_frame_time = std::time::Instant::now();
         self.frames_drawn += 1;
+    }
+
+    pub fn update_world(&mut self) {
+        if let Some(mut world) = self.world.take() {
+            world.check_for_commands();
+            self.set_vertex_buffers(world.get_vbufs());
+            self.world = Some(world);
+        }
     }
 
     pub fn print_fps(&self) {

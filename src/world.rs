@@ -21,6 +21,7 @@ pub struct World {
     command_send: Sender<Command>,
 }
 
+#[derive(Clone)]
 pub struct WorldCommunicator {
     command_send: Sender<Command>,
 }
