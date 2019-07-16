@@ -13,6 +13,8 @@ pub mod world;
 pub use world::World;
 pub use world::WorldCommunicator;
 
+pub mod mesh_gen;
+
 mod internal_tools;
 
 vulkano::impl_vertex!(Vertex, position, color, normal);
