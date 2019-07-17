@@ -6,12 +6,6 @@ use crate::world::*;
 use crate::exposed_tools::*;
 use crate::internal_tools::*;
 
-type ConcreteGraphicsPipeline = GraphicsPipeline<
-    SingleBufferDefinition<Vertex>,
-    Box<PipelineLayoutAbstract + Send + Sync + 'static>,
-    Arc<RenderPassAbstract + Send + Sync + 'static>,
->;
-
 pub struct App {
     instance: Arc<Instance>,
     events_loop: EventsLoop,
@@ -250,7 +244,9 @@ impl App {
         }
     }
 
-    pub fn add_world(&mut self, world: World) {
+    pub fn add_world(&mut self, mut world: World) {
+        world.update_renderpass(self.renderpass.clone());
+        world.update_device(self.device.clone());
         self.world = Some(world);
     }
 
@@ -305,7 +301,6 @@ impl App {
     pub fn update_world(&mut self) {
         if let Some(mut world) = self.world.take() {
             world.check_for_commands();
-            self.set_vertex_buffers(world.get_vbufs());
             self.world = Some(world);
         }
     }
@@ -558,6 +553,10 @@ impl App {
                     (),
                 )
                 .unwrap();
+        }
+
+        if let Some(world) = &self.world {
+            command_buffer_unfinished = world.add_draw_commands(command_buffer_unfinished, &self.dynamic_state, uniform_set.clone());
         }
 
         let command_buffer_finished = command_buffer_unfinished

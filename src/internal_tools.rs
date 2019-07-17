@@ -20,8 +20,15 @@ pub use vulkano_win::VkSurfaceBuild;
 pub use winit::{Event, EventsLoop, Window, WindowBuilder, WindowEvent};
 
 pub use std::sync::Arc;
+pub use crate::exposed_tools::*;
 
 pub struct SwapchainAndImages {
     pub swapchain: Arc<Swapchain<Window>>,
     pub images: Vec<Arc<SwapchainImage<Window>>>,
 }
+
+pub type ConcreteGraphicsPipeline = GraphicsPipeline<
+    SingleBufferDefinition<Vertex>,
+    Box<PipelineLayoutAbstract + Send + Sync + 'static>,
+    Arc<RenderPassAbstract + Send + Sync + 'static>,
+>;
