@@ -67,7 +67,7 @@ impl World {
 
     pub fn update_materials(&mut self) {
         if self.renderpass.is_none() || self.device.is_none() {
-            panic!("You tried to initialize materials without first settings the renderpass and device!");
+            panic!("You tried to initialize materials without first setting the renderpass and device!");
         }
 
         let device = self.device.as_mut().unwrap().clone();
@@ -179,7 +179,7 @@ impl Material {
     pub fn default() -> Self {
         Self {
             cached_pipeline: None,
-            fill_type: PrimitiveTopology::LineList,
+            fill_type: PrimitiveTopology::TriangleList,
         }
     }
 
