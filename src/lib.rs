@@ -12,6 +12,7 @@ pub use app_builder::AppBuilder;
 pub mod world;
 pub use world::World;
 pub use world::WorldCommunicator;
+pub use world::ObjectSpec;
 
 pub mod mesh_gen;
 

@@ -46,7 +46,7 @@ pub struct App {
     projection: CameraMatrix,
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
     pub camera: Box<Camera>,
-    world: Option<World>,
+    world: World,
 }
 
 struct AvailableRenderPasses {
@@ -197,7 +197,9 @@ impl App {
 
         let keys_down = KeysDown::all_false();
 
-        App {
+        let world = World::new(vbuf_creator.clone(), renderpass.clone(), device.clone());
+
+        Self {
             instance: instance.clone(),
             events_loop,
             surface,
@@ -240,14 +242,12 @@ impl App {
             projection,
             uniform_buffer,
             camera: Box::new(camera),
-            world: None,
+            world,
         }
     }
 
-    pub fn add_world(&mut self, mut world: World) {
-        world.update_renderpass(self.renderpass.clone());
-        world.update_device(self.device.clone());
-        self.world = Some(world);
+    pub fn get_world_com(&self) -> WorldCommunicator {
+        self.world.get_communicator()
     }
 
     pub fn set_vertex_buffers(&mut self, vertex_buffers: Vec<Arc<VertexBuffer>>) {
@@ -260,6 +260,7 @@ impl App {
         self.renderpass = self.available_renderpasses.multisampled_renderpass.clone();
         self.rebuild_pipeline();
         self.rebuild_swapchain();
+        self.world.update_renderpass(self.renderpass.clone());
     }
 
     pub fn disable_multisampling(&mut self) {
@@ -268,6 +269,7 @@ impl App {
         self.renderpass = self.available_renderpasses.standard_renderpass.clone();
         self.rebuild_pipeline();
         self.rebuild_swapchain();
+        self.world.update_renderpass(self.renderpass.clone());
     }
 
     pub fn create_new_vbuf_creator(&self) -> VbufCreator {
@@ -298,11 +300,8 @@ impl App {
         self.frames_drawn += 1;
     }
 
-    pub fn update_world(&mut self) {
-        if let Some(mut world) = self.world.take() {
-            world.check_for_commands();
-            self.world = Some(world);
-        }
+    fn update_world(&mut self) {
+        self.world.check_for_commands();
     }
 
     pub fn print_fps(&self) {
@@ -555,9 +554,7 @@ impl App {
                 .unwrap();
         }
 
-        if let Some(world) = &self.world {
-            command_buffer_unfinished = world.add_draw_commands(command_buffer_unfinished, &self.dynamic_state, uniform_set.clone());
-        }
+        command_buffer_unfinished = self.world.add_draw_commands(command_buffer_unfinished, &self.dynamic_state, uniform_set.clone());
 
         let command_buffer_finished = command_buffer_unfinished
             // We leave the render pass by calling `draw_end`. Note that if we had multiple
