@@ -160,6 +160,10 @@ impl ObjectSpec {
             material: Material::default(),
         }
     }
+
+    pub fn switch_fill_type(&mut self, new_primitive_topology: PrimitiveTopology) {
+        self.material.fill_type = new_primitive_topology;
+    }
 }
 
 impl Material {

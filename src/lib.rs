@@ -14,6 +14,8 @@ pub use world::World;
 pub use world::WorldCommunicator;
 pub use world::ObjectSpec;
 
+pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
+
 pub mod mesh_gen;
 
 mod internal_tools;
