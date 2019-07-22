@@ -195,9 +195,30 @@ impl App {
             vulkano::buffer::BufferUsage::all(),
         );
 
+        let uniform_buffer_subbuffer = {
+            let uniform_data = vs::ty::Data {
+                world: model,
+                view: view,
+                proj: projection,
+            };
+
+            uniform_buffer.next(uniform_data).unwrap()
+        };
+
+        let uniform_set = Arc::new(
+            vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(
+                pipeline.clone(),
+                0,
+            )
+            .add_buffer(uniform_buffer_subbuffer)
+            .unwrap()
+            .build()
+            .unwrap(),
+        );
+
         let keys_down = KeysDown::all_false();
 
-        let world = World::new(vbuf_creator.clone(), renderpass.clone(), device.clone());
+        let world = World::new(vbuf_creator.clone(), renderpass.clone(), device.clone(), uniform_set.clone(), dynamic_state.clone());
 
         Self {
             instance: instance.clone(),
@@ -499,6 +520,8 @@ impl App {
             .unwrap(),
         );
 
+        self.world.update_default_uniform_set(uniform_set.clone());
+
         let clear_values = if self.multisampling_enabled {
             vec![
                 [0.2, 0.2, 0.2, 1.0].into(),
@@ -510,63 +533,11 @@ impl App {
             vec![[0.2, 0.2, 0.2, 1.0].into(), 1f32.into()]
         };
 
-        let mut command_buffer_unfinished = AutoCommandBufferBuilder::primary_one_time_submit(
-            self.device.clone(),
-            self.queue.family(),
-        )
-        .unwrap()
-        // Before we can draw, we have to *enter a render pass*. There are two methods to do
-        // this: `draw_inline` and `draw_secondary`. The latter is a bit more advanced and is
-        // not covered here.
-        //
-        // The third parameter builds the list of values to clear the attachments with. The API
-        // is similar to the list of attachments when building the framebuffers, except that
-        // only the attachments that use `load: Clear` appear in the list.
-        .begin_render_pass(
-            self.framebuffers[self.frame_data.image_num.expect(
-                "
----------------------------------------------------------------------------------------------
-    [create_command_buffer]    (begin_renderpass)
-->  When trying to create the command buffer, found that frame_data.image_num is None.
-->  Maybe acquire_next_image was not called.
----------------------------------------------------------------------------------------------
-                ",
-            )]
-            .clone(),
-            false,
-            clear_values,
-        )
-        .unwrap();
+        let image_idx = self.frame_data.image_num.unwrap();
+        let framebuffer = self.framebuffers[image_idx].clone();
 
-        // add draw calls for every vertex buffer onto the command buffer
-        for vertex_buffer in self.vertex_buffers.iter() {
-            // We are now inside the first subpass of the render pass. We add a draw command.
-            //
-            // The last two parameters contain the list of resources to pass to the shaders.
-            command_buffer_unfinished = command_buffer_unfinished
-                .draw(
-                    self.pipeline.clone(),
-                    &self.dynamic_state,
-                    vertex_buffer.clone(),
-                    uniform_set.clone(),
-                    (),
-                )
-                .unwrap();
-        }
-
-        command_buffer_unfinished = self.world.add_draw_commands(command_buffer_unfinished, &self.dynamic_state, uniform_set.clone());
-
-        let command_buffer_finished = command_buffer_unfinished
-            // We leave the render pass by calling `draw_end`. Note that if we had multiple
-            // subpasses we could have called `next_inline` (or `next_secondary`) to jump to the
-            // next subpass.
-            .end_render_pass()
-            .unwrap()
-            // Finish building the command buffer by calling `build`.
-            .build()
-            .unwrap();
-
-        self.frame_data.command_buffer = Some(command_buffer_finished);
+        let command_buffer = ll::command_buffer_creator::create_command_buffer(self.device.clone(), self.queue.clone(), framebuffer, &clear_values, &self.world.get_objects());
+        self.frame_data.command_buffer = Some(command_buffer);
     }
 
     fn submit_and_check(&mut self) {
@@ -662,6 +633,7 @@ impl App {
             dimensions: [self.dimensions[0] as f32, self.dimensions[1] as f32],
             depth_range: 0.0..1.0,
         }]);
+        self.world.update_default_dynamic_state(self.dynamic_state.clone());
 
         let swapchain_and_images = match &self.swapchain {
             // the swapchain already exists and is just out of date, meaning we can

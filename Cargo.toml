@@ -5,14 +5,15 @@ authors = ["cynic64 <f3bl@gmx.com>"]
 edition = "2018"
 
 [dependencies]
-vulkano = "0.12"
-vulkano-win = "0.12"
-vulkano-shaders = "0.12"
+vulkano = "0.13"
+vulkano-win = "0.13"
+vulkano-shaders = "0.13"
 winit = "0.19"
 cgmath = "0.17"
 image = "0.21"
 time = "0.1.38"
 nalgebra-glm = "0.4"
+re-ll = { path = "../re-ll" }
 
 [profile.release]
 debug = true

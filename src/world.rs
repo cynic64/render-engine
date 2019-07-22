@@ -8,8 +8,10 @@ use std::sync::mpsc::{Receiver, Sender};
 
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 
+use ll::command_buffer_creator::ConcreteObject;
+
 pub struct World {
-    drawable_objects: HashMap<String, DrawableObject>,
+    objects: HashMap<String, ConcreteObject>,
     vbuf_creator: VbufCreator,
     // we need to use an option to get around the borrow checker later
     // soooooorry
@@ -19,6 +21,8 @@ pub struct World {
     command_send: Sender<Command>,
     renderpass: Arc<RenderPassAbstract + Send + Sync>,
     device: Arc<Device>,
+    default_uniform_set: Arc<DescriptorSet + Send + Sync>,
+    default_dynamic_state: DynamicState,
 }
 
 #[derive(Clone)]
@@ -39,26 +43,23 @@ pub struct ObjectSpec {
     material: Material,
 }
 
-struct DrawableObject {
-    vbuf: Arc<VertexBuffer>,
-    pipeline: Arc<ConcreteGraphicsPipeline>,
-}
-
 struct Material {
     pub fill_type: PrimitiveTopology,
 }
 
 impl World {
-    pub fn new(vbuf_creator: VbufCreator, renderpass: Arc<RenderPassAbstract + Send + Sync>, device: Arc<Device>) -> Self {
+    pub fn new(vbuf_creator: VbufCreator, renderpass: Arc<RenderPassAbstract + Send + Sync>, device: Arc<Device>, default_uniform_set: Arc<DescriptorSet + Send + Sync>, default_dynamic_state: DynamicState) -> Self {
         let (sender, receiver): (Sender<Command>, Receiver<Command>) = mpsc::channel();
 
         Self {
-            drawable_objects: HashMap::new(),
+            objects: HashMap::new(),
             vbuf_creator,
             command_recv: Some(receiver),
             command_send: sender,
             renderpass,
             device,
+            default_uniform_set,
+            default_dynamic_state,
         }
     }
 
@@ -68,6 +69,18 @@ impl World {
 
     pub fn update_device(&mut self, device: Arc<Device>) {
         self.device = device;
+    }
+
+    pub fn update_default_uniform_set(&mut self, uniform_set: Arc<DescriptorSet + Send + Sync>) {
+        self.default_uniform_set = uniform_set.clone();
+
+        self.objects.values_mut().for_each(|obj| obj.uniform_set = uniform_set.clone());
+    }
+
+    pub fn update_default_dynamic_state(&mut self, dynamic_state: DynamicState) {
+        self.default_dynamic_state = dynamic_state.clone();
+
+        self.objects.values_mut().for_each(|obj| obj.dynamic_state = dynamic_state.clone());
     }
 
     pub fn get_communicator(&self) -> WorldCommunicator {
@@ -81,7 +94,7 @@ impl World {
         let fs = fs::Shader::load(self.device.clone()).unwrap();
         let pipeline = Arc::new(
             GraphicsPipeline::start()
-                .vertex_input_single_buffer()
+                .vertex_input_single_buffer::<Vertex>()
                 .vertex_shader(vs.main_entry_point(), ())
                 .primitive_topology(spec.material.fill_type)
                 .viewports_dynamic_scissors_irrelevant(1)
@@ -92,33 +105,22 @@ impl World {
                 .unwrap(),
         );
 
-        let drawable_object = DrawableObject {
-            vbuf,
+        let object = ConcreteObject {
             pipeline,
+            dynamic_state: self.default_dynamic_state.clone(),
+            vertex_buffer: vbuf,
+            uniform_set: self.default_uniform_set.clone(),
         };
 
-        self.drawable_objects.insert(id, drawable_object);
+        self.objects.insert(id, object);
     }
 
-    pub fn add_draw_commands(&self, command_buffer: AutoCommandBufferBuilder, dynamic_state: &DynamicState, uniform_set: Arc<vulkano::descriptor::descriptor_set::DescriptorSet + Send + Sync>) -> AutoCommandBufferBuilder {
-        let mut command_buffer_unfinished = command_buffer;
-        for drawable_object in self.drawable_objects.values() {
-            command_buffer_unfinished = command_buffer_unfinished
-                .draw(
-                    drawable_object.pipeline.clone(),
-                    dynamic_state,
-                    drawable_object.vbuf.clone(),
-                    uniform_set.clone(),
-                    (),
-                )
-                .unwrap();
-        }
-
-        command_buffer_unfinished
+    pub fn get_objects(&self) -> Vec<ConcreteObject> {
+        self.objects.values().map(|x| x.clone()).collect()
     }
 
     pub fn delete_object(&mut self, id: String) {
-        self.drawable_objects.remove(&id);
+        self.objects.remove(&id);
     }
 
     pub fn check_for_commands(&mut self) {
@@ -174,7 +176,7 @@ impl Material {
     }
 }
 
-mod vs {
+pub mod vs {
     vulkano_shaders::shader! {
         ty: "vertex",
         src: "

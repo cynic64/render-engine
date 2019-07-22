@@ -52,7 +52,7 @@ pub enum KeyboardEventType {
     Keydown,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],
     pub color: [f32; 3],
