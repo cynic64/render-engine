@@ -13,6 +13,7 @@ pub struct OrbitCamera {
     // pitch and yaw are in radians
     pub pitch: f32,
     pub yaw: f32,
+    pub orbit_distance: f32,
     mouse_sens: f32,
 }
 
@@ -30,6 +31,7 @@ impl OrbitCamera {
         let up = vec3(0.0, 1.0, 0.0);
         let world_up = vec3(0.0, 1.0, 0.0);
         let mouse_sens = 0.0007;
+        let orbit_distance = 4.0;
 
         Self {
             center_position,
@@ -39,6 +41,7 @@ impl OrbitCamera {
             world_up,
             pitch,
             yaw,
+            orbit_distance,
             mouse_sens,
         }
     }
@@ -57,7 +60,7 @@ impl OrbitCamera {
 impl Camera for OrbitCamera {
     fn get_view_matrix(&self) -> [[f32; 4]; 4] {
         // orbits at 4 units away
-        let farther_front = self.front * 4.0;
+        let farther_front = self.front * self.orbit_distance;
         look_at(
             &(self.center_position + farther_front),
             &self.center_position,
