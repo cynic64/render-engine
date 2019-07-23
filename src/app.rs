@@ -536,73 +536,18 @@ impl App {
         let image_idx = self.frame_data.image_num.unwrap();
         let framebuffer = self.framebuffers[image_idx].clone();
 
-        let command_buffer = ll::command_buffer_creator::create_command_buffer(self.device.clone(), self.queue.clone(), framebuffer, &clear_values, &self.world.get_objects());
+        let command_buffer = ll::command_buffer::create_command_buffer(self.device.clone(), self.queue.clone(), framebuffer, &clear_values, &self.world.get_objects());
         self.frame_data.command_buffer = Some(command_buffer);
     }
 
     fn submit_and_check(&mut self) {
-        let future = self
-            .frame_data
-            .acquire_future
-            .take()
-            .expect(
-                "
----------------------------------------------------------------------------------------------
-    [submit_and_check]    (acquire_future.take())
-->  When trying to submit the command buffer and present to the swapchain, found that
-->  acquire_future is None.
-->  Maybe acquire_next_image was not called.
----------------------------------------------------------------------------------------------
-                ",
-            )
-            .then_execute(
-                self.queue.clone(),
-                self.frame_data.command_buffer.take().expect(
-                    "
----------------------------------------------------------------------------------------------
-    [submit_and_check]    (command_buffer.take())
-->  When trying to submit the command buffer and present to the swapchain, found that
-->  command_buffer is None.
-->  Maybe create_command_buffer was not called.
----------------------------------------------------------------------------------------------
-                ",
-                ),
-            )
-            .unwrap()
-            // The color output is now expected to contain our triangle. But in order to show it on
-            // the screen, we have to *present* the image by calling `present`.
-            //
-            // This function does not actually present the image immediately. Instead it submits a
-            // present command at the end of the queue. This means that it will only be presented once
-            // the GPU has finished executing the command buffer that draws the triangle.
-            .then_swapchain_present(
-                self.queue.clone(),
-                self.swapchain
-                    .as_ref()
-                    .expect(
-                        "
----------------------------------------------------------------------------------------------
-    [submit_and_check]    (then_swapchain_present)
--> When trying to submit the command buffer and present it to the swapchain, found that
--> the swapchain does not exist.
--> Unless you're trying to something really weird, the internal implementation probably
--> fucked up, because this shouldn't happen.
----------------------------------------------------------------------------------------------
-                    ",
-                    )
-                    .clone(),
-                self.frame_data.image_num.expect(
-                    "
----------------------------------------------------------------------------------------------
-    [submit_and_check]    (image_num.expect())
-->  When trying to submit the command buffer and present to the swapchain, found that
-->  image_num is None.
-->  Maybe acquire_next_image was not called.
----------------------------------------------------------------------------------------------
-                ",
-                ),
-            )
-            .then_signal_fence_and_flush();
+        let future = ll::command_buffer::submit_command_buffer_to_swapchain(
+            self.queue.clone(),
+            self.frame_data.acquire_future.take().unwrap(),
+            self.swapchain.as_ref().unwrap().clone(),
+            self.frame_data.image_num.take().unwrap(),
+            self.frame_data.command_buffer.take().unwrap(),
+        );
 
         match future {
             Ok(future) => {

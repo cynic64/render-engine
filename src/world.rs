@@ -8,7 +8,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 
-use ll::command_buffer_creator::ConcreteObject;
+use ll::command_buffer::ConcreteObject;
 
 pub struct World {
     objects: HashMap<String, ConcreteObject>,
