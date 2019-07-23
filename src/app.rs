@@ -20,7 +20,6 @@ pub struct App {
     dynamic_state: DynamicState,
     framebuffers: Vec<Arc<FramebufferAbstract + Send + Sync>>,
     must_rebuild_swapchain: bool,
-    previous_frame_end: Box<GpuFuture>,
     pub done: bool,
     pub dimensions: [u32; 2],
     vertex_buffers: Vec<Arc<VertexBuffer>>,
@@ -176,10 +175,6 @@ impl App {
         // In the loop below we are going to submit commands to the GPU. Submitting a command produces
         // an object that implements the `GpuFuture` trait, which holds the resources for as long as
         // they are in use by the GPU.
-        //
-        // Destroying the `GpuFuture` blocks until the GPU is finished executing it. In order to avoid
-        // that, we store the submission of the previous frame here.
-        let previous_frame_end = Box::new(sync::now(device.clone())) as Box<GpuFuture>;
 
         let vbuf_creator = VbufCreator::new(device.clone());
 
@@ -234,7 +229,6 @@ impl App {
             dynamic_state,
             framebuffers,
             must_rebuild_swapchain,
-            previous_frame_end,
             done: false,
             dimensions: [0, 0],
             vertex_buffers: vec![],
@@ -340,8 +334,6 @@ impl App {
             acquire_future: None,
             command_buffer: None,
         };
-
-        self.free_unused_resources();
 
         // Whenever the window resizes we need to recreate everything dependent on the window size.
         // In this example that includes the swapchain, the framebuffers and the dynamic state viewport.
@@ -541,7 +533,7 @@ impl App {
     }
 
     fn submit_and_check(&mut self) {
-        let future = ll::command_buffer::submit_command_buffer_to_swapchain(
+        let result = ll::command_buffer::submit_command_buffer_to_swapchain(
             self.queue.clone(),
             self.frame_data.acquire_future.take().unwrap(),
             self.swapchain.as_ref().unwrap().clone(),
@@ -549,27 +541,7 @@ impl App {
             self.frame_data.command_buffer.take().unwrap(),
         );
 
-        match future {
-            Ok(future) => {
-                self.previous_frame_end = Box::new(future) as Box<_>;
-            }
-            Err(FlushError::OutOfDate) => {
-                self.must_rebuild_swapchain = true;
-                self.previous_frame_end = Box::new(sync::now(self.device.clone())) as Box<_>;
-            }
-            Err(e) => {
-                println!("{:?}", e);
-                self.previous_frame_end = Box::new(sync::now(self.device.clone())) as Box<_>;
-            }
-        }
-    }
-
-    fn free_unused_resources(&mut self) {
-        // It is important to call this function from time to time, otherwise resources will keep
-        // accumulating and you will eventually reach an out of memory error.
-        // Calling this function polls various fences in order to determine what the GPU has
-        // already processed, and frees the resources that are no longer needed.
-        self.previous_frame_end.cleanup_finished();
+        self.must_rebuild_swapchain = ll::command_buffer::cleanup_swapchain_result(self.device.clone(), result);
     }
 
     fn rebuild_swapchain(&mut self) {
