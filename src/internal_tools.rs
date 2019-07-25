@@ -24,11 +24,6 @@ pub use crate::exposed_tools::*;
 
 pub extern crate re_ll as ll;
 
-pub struct SwapchainAndImages {
-    pub swapchain: Arc<Swapchain<Window>>,
-    pub images: Vec<Arc<SwapchainImage<Window>>>,
-}
-
 pub type ConcreteGraphicsPipeline = GraphicsPipeline<
     SingleBufferDefinition<Vertex>,
     Box<PipelineLayoutAbstract + Send + Sync + 'static>,

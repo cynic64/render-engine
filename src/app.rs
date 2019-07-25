@@ -14,10 +14,8 @@ pub struct App {
     queue: Arc<Queue>,
     renderpass: Arc<RenderPassAbstract + Send + Sync>,
     pipeline: Arc<ConcreteGraphicsPipeline>,
-    dynamic_state: DynamicState,
     pub done: bool,
     pub dimensions: [u32; 2],
-    vertex_buffers: Vec<Arc<VertexBuffer>>,
     command_buffer: Option<AutoCommandBuffer>,
     pub unprocessed_events: Vec<Event>,
     pub unprocessed_keydown_events: Vec<VirtualKeyCode>,
@@ -28,8 +26,6 @@ pub struct App {
     start_time: std::time::Instant,
     frames_drawn: u32,
     vbuf_creator: VbufCreator,
-    swapchain_caps: vulkano::swapchain::Capabilities,
-    image_format: vulkano::format::Format,
     multisampling_enabled: bool,
     vertex_shader: vs::Shader,
     fragment_shader: fs::Shader,
@@ -41,7 +37,7 @@ pub struct App {
     uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
     pub camera: Box<Camera>,
     world: World,
-    vk_window: ll::swapchain::VkWindow,
+    vk_window: ll::vk_window::VkWindow,
 }
 
 struct AvailableRenderPasses {
@@ -105,7 +101,7 @@ impl App {
         // is the multisampled one.
         let renderpass = available_renderpasses.standard_renderpass.clone();
 
-        let vk_window = ll::swapchain::VkWindow::new(device.clone(), queue.clone(), surface.clone(), renderpass.clone(), swapchain_caps.clone());
+        let vk_window = ll::vk_window::VkWindow::new(device.clone(), queue.clone(), surface.clone(), renderpass.clone(), swapchain_caps.clone());
         let dimensions = vk_window.get_dimensions();
 
         // Before we draw we have to create what is called a pipeline. This is similar to an OpenGL
@@ -201,10 +197,8 @@ impl App {
             queue,
             renderpass,
             pipeline,
-            dynamic_state,
             done: false,
             dimensions,
-            vertex_buffers: vec![],
             command_buffer: None,
             unprocessed_events: vec![],
             unprocessed_keydown_events: vec![],
@@ -215,8 +209,6 @@ impl App {
             start_time: std::time::Instant::now(),
             frames_drawn: 0,
             vbuf_creator,
-            swapchain_caps,
-            image_format,
             multisampling_enabled,
             vertex_shader: vs,
             fragment_shader: fs,
@@ -233,10 +225,6 @@ impl App {
 
     pub fn get_world_com(&self) -> WorldCommunicator {
         self.world.get_communicator()
-    }
-
-    pub fn set_vertex_buffers(&mut self, vertex_buffers: Vec<Arc<VertexBuffer>>) {
-        self.vertex_buffers = vertex_buffers;
     }
 
     pub fn enable_multisampling(&mut self) {
@@ -257,16 +245,6 @@ impl App {
 
     pub fn create_new_vbuf_creator(&self) -> VbufCreator {
         VbufCreator::new(self.device.clone())
-    }
-
-    pub fn clear_vertex_buffers(&mut self) {
-        self.vertex_buffers = vec![];
-    }
-
-    pub fn new_vbuf_from_verts(&mut self, verts: &[Vertex]) {
-        // creates a new vertex buffer from the given vertices and appends it to the list of vertices
-        let vertex_buffer = self.vbuf_creator.create_vbuf_from_verts(verts);
-        self.vertex_buffers.push(vertex_buffer);
     }
 
     pub fn draw_frame(&mut self) {
@@ -473,102 +451,6 @@ impl App {
 
     fn submit_and_check(&mut self) {
         self.vk_window.submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
-    }
-
-    // fn _rebuild_framebuffers(&mut self) {
-    //     if self.multisampling_enabled {
-    //         self.framebuffers = self
-    //             .images
-    //             .iter()
-    //             .map(|image| {
-    //                 let multisampled_color =
-    //                     vulkano::image::attachment::AttachmentImage::transient_multisampled(
-    //                         self.device.clone(),
-    //                         self.dimensions,
-    //                         4,
-    //                         self.image_format,
-    //                      )
-    //                     .unwrap();
-
-    //                 let multisampled_depth =
-    //                     vulkano::image::attachment::AttachmentImage::transient_multisampled(
-    //                         self.device.clone(),
-    //                         self.dimensions,
-    //                         4,
-    //                         vulkano::format::Format::D16Unorm,
-    //                     )
-    //                     .unwrap();
-
-    //                 let resolve_depth = vulkano::image::attachment::AttachmentImage::transient(
-    //                     self.device.clone(),
-    //                     self.dimensions,
-    //                     vulkano::format::D16Unorm,
-    //                 )
-    //                 .unwrap();
-
-    //                 let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> =
-    //                     Arc::new(
-    //                         vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
-    //                             .add(multisampled_color.clone())
-    //                             .unwrap()
-    //                             .add(image.clone())
-    //                             .unwrap()
-    //                             .add(multisampled_depth.clone())
-    //                             .unwrap()
-    //                             .add(resolve_depth.clone())
-    //                             .unwrap()
-    //                             .build()
-    //                             .unwrap(),
-    //                     );
-
-    //                 fba
-    //             })
-    //             .collect::<Vec<_>>();
-    //     } else {
-    //         self.framebuffers = self
-    //             .images
-    //             .iter()
-    //             .map(|image| {
-    //                 let depth_buffer = vulkano::image::attachment::AttachmentImage::transient(
-    //                     self.device.clone(),
-    //                     self.dimensions,
-    //                     vulkano::format::D16Unorm,
-    //                 )
-    //                 .unwrap();
-
-    //                 let fba: Arc<vulkano::framebuffer::FramebufferAbstract + Send + Sync> =
-    //                     Arc::new(
-    //                         vulkano::framebuffer::Framebuffer::start(self.renderpass.clone())
-    //                             .add(image.clone())
-    //                             .unwrap()
-    //                             .add(depth_buffer.clone())
-    //                             .unwrap()
-    //                             .build()
-    //                             .unwrap(),
-    //                     );
-
-    //                 fba
-    //             })
-    //             .collect::<Vec<_>>();
-    //     }
-    // }
-
-    fn rebuild_pipeline(&mut self) {
-        // the purpose of this function is to be called after the render pass or another
-        // parameter for the graphics pipeline is changed, and the pipeline must be
-        // rebuilt.
-        self.pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input_single_buffer()
-                .vertex_shader(self.vertex_shader.main_entry_point(), ())
-                .triangle_list()
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(self.fragment_shader.main_entry_point(), ())
-                .render_pass(Subpass::from(self.renderpass.clone(), 0).unwrap())
-                .depth_stencil_simple_depth()
-                .build(self.device.clone())
-                .unwrap(),
-        );
     }
 }
 
