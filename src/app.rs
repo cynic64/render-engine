@@ -445,6 +445,20 @@ impl App {
 
         self.world.update_default_uniform_set(uniform_set.clone());
 
+        let dimensions = self.vk_window.get_dimensions();
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+            depth_range: 0.0..1.0,
+        };
+        let dynamic_state = DynamicState {
+            line_width: None,
+            viewports: Some(vec![viewport]),
+            scissors: None,
+        };
+
+        self.world.update_default_dynamic_state(dynamic_state);
+
         let clear_values = if self.multisampling_enabled {
             vec![
                 [0.2, 0.2, 0.2, 1.0].into(),
@@ -572,17 +586,17 @@ fn create_available_renderpasses(
         vulkano::single_pass_renderpass!(
             device.clone(),
             attachments: {
-                multisampled_color: {
-                    load: Clear,
-                    store: DontCare,
-                    format: format,
-                    samples: 4,
-                },
                 resolve_color: {
                     load: Clear,
                     store: Store,
                     format: format,
                     samples: 1,
+                },
+                multisampled_color: {
+                    load: Clear,
+                    store: DontCare,
+                    format: format,
+                    samples: 4,
                 },
                 multisampled_depth: {
                     load: Clear,
