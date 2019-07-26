@@ -2,9 +2,9 @@ extern crate nalgebra_glm as glm;
 
 use crate::camera::*;
 use crate::creator::*;
-use crate::world::*;
 use crate::exposed_tools::*;
 use crate::internal_tools::*;
+use crate::world::*;
 
 pub struct App {
     instance: Arc<Instance>,
@@ -101,7 +101,13 @@ impl App {
         // is the multisampled one.
         let renderpass = available_renderpasses.standard_renderpass.clone();
 
-        let vk_window = ll::vk_window::VkWindow::new(device.clone(), queue.clone(), surface.clone(), renderpass.clone(), swapchain_caps.clone());
+        let vk_window = ll::vk_window::VkWindow::new(
+            device.clone(),
+            queue.clone(),
+            surface.clone(),
+            renderpass.clone(),
+            swapchain_caps.clone(),
+        );
         let dimensions = vk_window.get_dimensions();
 
         // Before we draw we have to create what is called a pipeline. This is similar to an OpenGL
@@ -187,7 +193,13 @@ impl App {
 
         let keys_down = KeysDown::all_false();
 
-        let world = World::new(vbuf_creator.clone(), renderpass.clone(), device.clone(), uniform_set.clone(), dynamic_state.clone());
+        let world = World::new(
+            vbuf_creator.clone(),
+            renderpass.clone(),
+            device.clone(),
+            uniform_set.clone(),
+            dynamic_state.clone(),
+        );
 
         Self {
             instance: instance.clone(),
@@ -387,7 +399,8 @@ impl App {
         self.done = done;
 
         // reset cursor and change camera view
-        self.vk_window.get_surface()
+        self.vk_window
+            .get_surface()
             .window()
             .set_cursor_position(winit::dpi::LogicalPosition {
                 x: CURSOR_RESET_POS_X as f64,
@@ -445,12 +458,19 @@ impl App {
 
         let framebuffer = self.vk_window.next_framebuffer();
 
-        let command_buffer = ll::command_buffer::create_command_buffer(self.device.clone(), self.queue.clone(), framebuffer, &clear_values, &self.world.get_objects());
+        let command_buffer = ll::command_buffer::create_command_buffer(
+            self.device.clone(),
+            self.queue.clone(),
+            framebuffer,
+            &clear_values,
+            &self.world.get_objects(),
+        );
         self.command_buffer = Some(command_buffer);
     }
 
     fn submit_and_check(&mut self) {
-        self.vk_window.submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
+        self.vk_window
+            .submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
     }
 }
 
