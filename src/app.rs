@@ -1,7 +1,6 @@
 extern crate nalgebra_glm as glm;
 
 use crate::camera::*;
-use crate::creator::*;
 use crate::exposed_tools::*;
 use crate::internal_tools::*;
 use crate::world::*;
@@ -13,7 +12,6 @@ pub struct App {
     device: Arc<Device>,
     queue: Arc<Queue>,
     renderpass: Arc<RenderPassAbstract + Send + Sync>,
-    pipeline: Arc<ConcreteGraphicsPipeline>,
     pub done: bool,
     pub dimensions: [u32; 2],
     command_buffer: Option<AutoCommandBuffer>,
@@ -25,17 +23,9 @@ pub struct App {
     last_frame_time: std::time::Instant,
     start_time: std::time::Instant,
     frames_drawn: u32,
-    vbuf_creator: VbufCreator,
     multisampling_enabled: bool,
-    vertex_shader: vs::Shader,
-    fragment_shader: fs::Shader,
     available_renderpasses: AvailableRenderPasses,
     // MVP
-    model: CameraMatrix,
-    view: CameraMatrix,
-    projection: CameraMatrix,
-    uniform_buffer: vulkano::buffer::cpu_pool::CpuBufferPool<vs::ty::Data>,
-    pub camera: Box<Camera>,
     world: World,
     vk_window: ll::vk_window::VkWindow,
 }
@@ -77,17 +67,6 @@ impl App {
         // the user can later enable multisampling with app.enable_multisampling()
         let multisampling_enabled = false;
 
-        // The next step is to create the shaders.
-        //
-        // The raw shader creation API provided by the vulkano library is unsafe, for various reasons.
-        //
-        // An overview of what the `vulkano_shaders::shader!` macro generates can be found in the
-        // `vulkano-shaders` crate docs. You can view them at https://docs.rs/vulkano-shaders/
-        //
-        // TODO: explain this in details
-        let vs = vs::Shader::load(device.clone()).unwrap();
-        let fs = fs::Shader::load(device.clone()).unwrap();
-
         // At this point, OpenGL initialization would be finished. However in Vulkan it is not. OpenGL
         // implicitly does a lot of computation whenever you draw. In Vulkan, you have to do all this
         // manually.
@@ -110,96 +89,17 @@ impl App {
         );
         let dimensions = vk_window.get_dimensions();
 
-        // Before we draw we have to create what is called a pipeline. This is similar to an OpenGL
-        // program, but much more specific.
-        let pipeline = Arc::new(
-            GraphicsPipeline::start()
-                // We need to indicate the layout of the vertices.
-                // The type `SingleBufferDefinition` actually contains a template parameter corresponding
-                // to the type of each vertex. But in this code it is automatically inferred.
-                .vertex_input_single_buffer()
-                // A Vulkan shader can in theory contain multiple entry points, so we have to specify
-                // which one. The `main` word of `main_entry_point` actually corresponds to the name of
-                // the entry point.
-                .vertex_shader(vs.main_entry_point(), ())
-                // The content of the vertex buffer describes a list of triangles.
-                .triangle_list()
-                // Use a resizable viewport set to draw over the entire window
-                .viewports_dynamic_scissors_irrelevant(1)
-                // See `vertex_shader`.
-                .fragment_shader(fs.main_entry_point(), ())
-                // We have to indicate which subpass of which render pass this pipeline is going to be used
-                // in. The pipeline will only be usable from this particular subpass.
-                .render_pass(Subpass::from(renderpass.clone(), 0).unwrap())
-                .depth_stencil_simple_depth()
-                // Now that our builder is filled, we call `build()` to obtain an actual pipeline.
-                .build(device.clone())
-                .unwrap(),
-        );
-
-        // Dynamic viewports allow us to recreate just the viewport when the window is resized
-        // Otherwise we would have to recreate the whole pipeline.
-        let viewport = Viewport {
-            origin: [0.0, 0.0],
-            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-            depth_range: 0.0..1.0,
-        };
-        let dynamic_state = DynamicState {
-            line_width: None,
-            viewports: Some(vec![viewport]),
-            scissors: None,
-        };
-
         // Initialization is finally finished!
 
         // In the loop below we are going to submit commands to the GPU. Submitting a command produces
         // an object that implements the `GpuFuture` trait, which holds the resources for as long as
         // they are in use by the GPU.
 
-        let vbuf_creator = VbufCreator::new(device.clone());
-
-        // mvp
-        let camera = FlyCamera::default();
-        let model: CameraMatrix =
-            glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
-        let view: CameraMatrix = camera.get_view_matrix();
-        let projection: CameraMatrix = camera.get_projection_matrix();
-
-        let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(
-            device.clone(),
-            vulkano::buffer::BufferUsage::all(),
-        );
-
-        let uniform_buffer_subbuffer = {
-            let uniform_data = vs::ty::Data {
-                world: model,
-                view: view,
-                proj: projection,
-            };
-
-            uniform_buffer.next(uniform_data).unwrap()
-        };
-
-        let uniform_set = Arc::new(
-            vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(
-                pipeline.clone(),
-                0,
-            )
-            .add_buffer(uniform_buffer_subbuffer)
-            .unwrap()
-            .build()
-            .unwrap(),
-        );
-
         let keys_down = KeysDown::all_false();
 
-        let world = World::new(
-            vbuf_creator.clone(),
-            renderpass.clone(),
-            device.clone(),
-            uniform_set.clone(),
-            dynamic_state.clone(),
-        );
+        let camera = OrbitCamera::default();
+
+        let world = World::new(renderpass.clone(), device.clone(), Box::new(camera));
 
         Self {
             instance: instance.clone(),
@@ -208,7 +108,6 @@ impl App {
             device,
             queue,
             renderpass,
-            pipeline,
             done: false,
             dimensions,
             command_buffer: None,
@@ -220,19 +119,15 @@ impl App {
             last_frame_time: std::time::Instant::now(),
             start_time: std::time::Instant::now(),
             frames_drawn: 0,
-            vbuf_creator,
             multisampling_enabled,
-            vertex_shader: vs,
-            fragment_shader: fs,
             available_renderpasses,
-            model,
-            view,
-            projection,
-            uniform_buffer,
-            camera: Box::new(camera),
             world,
             vk_window,
         }
+    }
+
+    pub fn update_camera(&mut self, camera: Box<Camera>) {
+        self.world.update_camera(camera);
     }
 
     pub fn get_world_com(&self) -> WorldCommunicator {
@@ -255,26 +150,27 @@ impl App {
         self.world.update_renderpass(self.renderpass.clone());
     }
 
-    pub fn create_new_vbuf_creator(&self) -> VbufCreator {
-        VbufCreator::new(self.device.clone())
-    }
-
     pub fn draw_frame(&mut self) {
         self.clear_unprocessed_events();
         self.setup_frame();
-        self.update_world();
 
         self.create_command_buffer();
         self.submit_and_check();
 
         self.delta = get_elapsed(self.last_frame_time);
         self.handle_input();
+        self.update_world();
         self.last_frame_time = std::time::Instant::now();
         self.frames_drawn += 1;
     }
 
     fn update_world(&mut self) {
-        self.world.check_for_commands();
+        self.world.update(
+            &self.unprocessed_events,
+            &self.keys_down,
+            self.delta,
+            self.vk_window.get_dimensions(),
+        );
     }
 
     pub fn print_fps(&self) {
@@ -408,11 +304,6 @@ impl App {
             })
             .expect("Couldn't re-set cursor position!");
 
-        self.camera
-            .handle_input(&unprocessed_events.clone(), &self.keys_down, self.delta);
-        self.view = self.camera.get_view_matrix();
-        self.projection = self.camera.get_projection_matrix();
-
         self.unprocessed_events = unprocessed_events;
     }
 
@@ -422,43 +313,6 @@ impl App {
     }
 
     fn create_command_buffer(&mut self) {
-        let uniform_buffer_subbuffer = {
-            let uniform_data = vs::ty::Data {
-                world: self.model,
-                view: self.view,
-                proj: self.projection,
-            };
-
-            self.uniform_buffer.next(uniform_data).unwrap()
-        };
-
-        let uniform_set = Arc::new(
-            vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(
-                self.pipeline.clone(),
-                0,
-            )
-            .add_buffer(uniform_buffer_subbuffer)
-            .unwrap()
-            .build()
-            .unwrap(),
-        );
-
-        self.world.update_default_uniform_set(uniform_set.clone());
-
-        let dimensions = self.vk_window.get_dimensions();
-        let viewport = Viewport {
-            origin: [0.0, 0.0],
-            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-            depth_range: 0.0..1.0,
-        };
-        let dynamic_state = DynamicState {
-            line_width: None,
-            viewports: Some(vec![viewport]),
-            scissors: None,
-        };
-
-        self.world.update_default_dynamic_state(dynamic_state);
-
         let clear_values = if self.multisampling_enabled {
             vec![
                 [0.2, 0.2, 0.2, 1.0].into(),

@@ -10,9 +10,9 @@ pub mod app_builder;
 pub use app_builder::AppBuilder;
 
 pub mod world;
+pub use world::ObjectSpec;
 pub use world::World;
 pub use world::WorldCommunicator;
-pub use world::ObjectSpec;
 
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 
@@ -21,5 +21,3 @@ pub mod mesh_gen;
 mod internal_tools;
 
 vulkano::impl_vertex!(Vertex, position, color, normal);
-
-pub mod creator;

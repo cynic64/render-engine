@@ -154,3 +154,10 @@ pub fn winit_event_to_mouse_movement(event: &Event) -> Option<(f32, f32)> {
         None
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct MVP {
+    pub model: CameraMatrix,
+    pub view: CameraMatrix,
+    pub proj: CameraMatrix,
+}

@@ -205,8 +205,7 @@ impl Camera for FlyCamera {
     }
 }
 
-pub struct OrthoCamera {
-}
+pub struct OrthoCamera {}
 
 impl Camera for OrthoCamera {
     fn get_view_matrix(&self) -> [[f32; 4]; 4] {
@@ -217,6 +216,5 @@ impl Camera for OrthoCamera {
         Mat4::identity().into()
     }
 
-    fn handle_input(&mut self, _events: &[Event], _keys_down: &KeysDown, _delta: f32) {
-    }
+    fn handle_input(&mut self, _events: &[Event], _keys_down: &KeysDown, _delta: f32) {}
 }

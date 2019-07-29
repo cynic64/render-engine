@@ -19,13 +19,7 @@ pub use vulkano_win::VkSurfaceBuild;
 
 pub use winit::{Event, EventsLoop, Window, WindowBuilder, WindowEvent};
 
-pub use std::sync::Arc;
 pub use crate::exposed_tools::*;
+pub use std::sync::Arc;
 
 pub extern crate re_ll as ll;
-
-pub type ConcreteGraphicsPipeline = GraphicsPipeline<
-    SingleBufferDefinition<Vertex>,
-    Box<PipelineLayoutAbstract + Send + Sync + 'static>,
-    Arc<RenderPassAbstract + Send + Sync + 'static>,
->;
