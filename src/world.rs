@@ -20,7 +20,7 @@ pub struct World {
     // we store a copy of the sender as well so we can clone it and give it
     // out to whoever needs it
     command_send: Sender<Command>,
-    renderpass: Arc<RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<RenderPassAbstract + Send + Sync>,
     device: Arc<Device>,
     default_dynstate: DynamicState,
     mvp: MVP,
@@ -51,7 +51,7 @@ struct Material {
 
 impl World {
     pub fn new(
-        renderpass: Arc<RenderPassAbstract + Send + Sync>,
+        render_pass: Arc<RenderPassAbstract + Send + Sync>,
         device: Arc<Device>,
         camera: Box<Camera>,
     ) -> Self {
@@ -81,7 +81,7 @@ impl World {
             objects: HashMap::new(),
             command_recv: Some(receiver),
             command_send: sender,
-            renderpass,
+            render_pass,
             device,
             default_dynstate: dynamic_state,
             mvp,
@@ -89,8 +89,8 @@ impl World {
         }
     }
 
-    pub fn update_renderpass(&mut self, new_renderpass: Arc<RenderPassAbstract + Send + Sync>) {
-        self.renderpass = new_renderpass;
+    pub fn update_render_pass(&mut self, new_renderpass: Arc<RenderPassAbstract + Send + Sync>) {
+        self.render_pass = new_renderpass;
     }
 
     pub fn update_camera(&mut self, camera: Box<Camera>) {
@@ -113,7 +113,7 @@ impl World {
                 .primitive_topology(spec.material.fill_type)
                 .viewports_dynamic_scissors_irrelevant(1)
                 .fragment_shader(fs.main_entry_point(), ())
-                .render_pass(Subpass::from(self.renderpass.clone(), 0).unwrap())
+                .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
                 .depth_stencil_simple_depth()
                 .build(self.device.clone())
                 .unwrap(),

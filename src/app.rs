@@ -4,6 +4,7 @@ use crate::camera::*;
 use crate::exposed_tools::*;
 use crate::internal_tools::*;
 use crate::world::*;
+use crate::render_passes;
 
 pub struct App {
     instance: Arc<Instance>,
@@ -11,7 +12,7 @@ pub struct App {
     physical_device_index: usize,
     device: Arc<Device>,
     queue: Arc<Queue>,
-    renderpass: Arc<RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<RenderPassAbstract + Send + Sync>,
     pub done: bool,
     pub dimensions: [u32; 2],
     command_buffer: Option<AutoCommandBuffer>,
@@ -24,16 +25,12 @@ pub struct App {
     start_time: std::time::Instant,
     frames_drawn: u32,
     multisampling_enabled: bool,
-    available_renderpasses: AvailableRenderPasses,
     // MVP
     world: World,
     vk_window: ll::vk_window::VkWindow,
 }
 
-struct AvailableRenderPasses {
-    multisampled_renderpass: Arc<RenderPassAbstract + Send + Sync>,
-    standard_renderpass: Arc<RenderPassAbstract + Send + Sync>,
-}
+const MULTISAMPLING_FACTOR: u32 = 4;
 
 impl App {
     pub fn new() -> Self {
@@ -73,18 +70,15 @@ impl App {
 
         let swapchain_caps = surface.capabilities(physical).unwrap();
         // on my machine this is B8G8R8Unorm
-        let image_format = swapchain_caps.supported_formats[0].0;
-        let available_renderpasses = create_available_renderpasses(device.clone(), image_format);
-
-        // default to using the standard renderpass. The only other option (for now)
+        // default to using the standard render_pass. The only other option (for now)
         // is the multisampled one.
-        let renderpass = available_renderpasses.standard_renderpass.clone();
+        let render_pass = render_passes::basic(device.clone());
 
         let vk_window = ll::vk_window::VkWindow::new(
             device.clone(),
             queue.clone(),
             surface.clone(),
-            renderpass.clone(),
+            render_pass.clone(),
             swapchain_caps.clone(),
         );
         let dimensions = vk_window.get_dimensions();
@@ -99,7 +93,7 @@ impl App {
 
         let camera = OrbitCamera::default();
 
-        let world = World::new(renderpass.clone(), device.clone(), Box::new(camera));
+        let world = World::new(render_pass.clone(), device.clone(), Box::new(camera));
 
         Self {
             instance: instance.clone(),
@@ -107,7 +101,7 @@ impl App {
             physical_device_index: physical.index(),
             device,
             queue,
-            renderpass,
+            render_pass,
             done: false,
             dimensions,
             command_buffer: None,
@@ -120,7 +114,6 @@ impl App {
             start_time: std::time::Instant::now(),
             frames_drawn: 0,
             multisampling_enabled,
-            available_renderpasses,
             world,
             vk_window,
         }
@@ -136,18 +129,26 @@ impl App {
 
     pub fn enable_multisampling(&mut self) {
         self.multisampling_enabled = true;
-        self.renderpass = self.available_renderpasses.multisampled_renderpass.clone();
-        self.vk_window.update_render_pass(self.renderpass.clone());
-        self.vk_window.rebuild();
-        self.world.update_renderpass(self.renderpass.clone());
+        self.render_pass = render_passes::multisampled_with_depth(self.device.clone(), MULTISAMPLING_FACTOR);
+        self.update_render_pass();
     }
 
     pub fn disable_multisampling(&mut self) {
         self.multisampling_enabled = false;
-        self.renderpass = self.available_renderpasses.standard_renderpass.clone();
-        self.vk_window.update_render_pass(self.renderpass.clone());
+        self.render_pass = render_passes::with_depth(self.device.clone());
+        self.update_render_pass();
+    }
+
+    pub fn set_render_pass(&mut self, render_pass: Arc<RenderPassAbstract + Send + Sync>) {
+        self.render_pass = render_pass;
+        self.update_render_pass();
+    }
+
+    fn update_render_pass(&mut self) {
+        // call this whenever you change the renderr pass
+        self.vk_window.update_render_pass(self.render_pass.clone());
         self.vk_window.rebuild();
-        self.world.update_renderpass(self.renderpass.clone());
+        self.world.update_render_pass(self.render_pass.clone());
     }
 
     pub fn draw_frame(&mut self) {
@@ -176,6 +177,10 @@ impl App {
     pub fn print_fps(&self) {
         let fps = (self.frames_drawn as f32) / get_elapsed(self.start_time);
         println!("FPS: {}", fps);
+    }
+
+    pub fn get_device(&self) -> Arc<Device> {
+        self.device.clone()
     }
 
     fn setup_frame(&mut self) {
@@ -376,6 +381,14 @@ fn get_physical_device(instance: &Arc<Instance>) -> PhysicalDevice {
     PhysicalDevice::enumerate(&instance).next().unwrap()
 }
 
+
+
+
+
+
+
+
+
 fn get_device_and_queues(
     physical: PhysicalDevice,
     surface: Arc<Surface<Window>>,
@@ -430,81 +443,6 @@ fn get_device_and_queues(
         [(queue_family, 0.5)].iter().cloned(),
     )
     .unwrap()
-}
-
-fn create_available_renderpasses(
-    device: Arc<Device>,
-    format: vulkano::format::Format,
-) -> AvailableRenderPasses {
-    let multisampled_renderpass = Arc::new(
-        vulkano::single_pass_renderpass!(
-            device.clone(),
-            attachments: {
-                resolve_color: {
-                    load: Clear,
-                    store: Store,
-                    format: format,
-                    samples: 1,
-                },
-                multisampled_color: {
-                    load: Clear,
-                    store: DontCare,
-                    format: format,
-                    samples: 4,
-                },
-                multisampled_depth: {
-                    load: Clear,
-                    store: DontCare,
-                    format: vulkano::format::Format::D16Unorm,
-                    samples: 4,
-                },
-                resolve_depth: {
-                    load: DontCare,
-                    store: DontCare,
-                    format: vulkano::format::Format::D16Unorm,
-                    samples: 1,
-                    initial_layout: ImageLayout::Undefined,
-                    final_layout: ImageLayout::DepthStencilAttachmentOptimal,
-                }
-            },
-            pass: {
-                color: [multisampled_color],
-                depth_stencil: {multisampled_depth},
-                resolve: [resolve_color]
-            }
-        )
-        .unwrap(),
-    );
-
-    let standard_renderpass: Arc<RenderPassAbstract + Send + Sync> = Arc::new(
-        vulkano::single_pass_renderpass!(
-            device.clone(),
-            attachments: {
-                color: {
-                    load: Clear,
-                    store: Store,
-                    format: format,
-                    samples: 1,
-                },
-                depth: {
-                    load: Clear,
-                    store: Store,
-                    format: vulkano::format::Format::D16Unorm,
-                    samples: 1,
-                }
-            },
-            pass: {
-                color: [color],
-                depth_stencil: {depth}
-            }
-        )
-        .unwrap(),
-    );
-
-    AvailableRenderPasses {
-        multisampled_renderpass,
-        standard_renderpass,
-    }
 }
 
 mod vs {

@@ -6,6 +6,8 @@ pub use app::App;
 pub mod camera;
 pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
 
+pub mod render_passes;
+
 pub mod app_builder;
 pub use app_builder::AppBuilder;
 
