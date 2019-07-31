@@ -318,16 +318,7 @@ impl App {
     }
 
     fn create_command_buffer(&mut self) {
-        let clear_values = if self.multisampling_enabled {
-            vec![
-                [0.2, 0.2, 0.2, 1.0].into(),
-                [0.2, 0.2, 0.2, 1.0].into(),
-                1f32.into(),
-                vulkano::format::ClearValue::None,
-            ]
-        } else {
-            vec![[0.2, 0.2, 0.2, 1.0].into(), 1f32.into()]
-        };
+        let clear_values = render_passes::clear_values_for_pass(self.render_pass.clone());
 
         let framebuffer = self.vk_window.next_framebuffer();
 
