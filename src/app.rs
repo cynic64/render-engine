@@ -3,8 +3,8 @@ extern crate nalgebra_glm as glm;
 use crate::camera::*;
 use crate::exposed_tools::*;
 use crate::internal_tools::*;
-use crate::world::*;
 use crate::render_passes;
+use crate::world::*;
 
 pub struct App {
     instance: Arc<Instance>,
@@ -129,7 +129,8 @@ impl App {
 
     pub fn enable_multisampling(&mut self) {
         self.multisampling_enabled = true;
-        self.render_pass = render_passes::multisampled_with_depth(self.device.clone(), MULTISAMPLING_FACTOR);
+        self.render_pass =
+            render_passes::multisampled_with_depth(self.device.clone(), MULTISAMPLING_FACTOR);
         self.update_render_pass();
     }
 
@@ -371,14 +372,6 @@ fn get_physical_device(instance: &Arc<Instance>) -> PhysicalDevice {
     // most of the time.
     PhysicalDevice::enumerate(&instance).next().unwrap()
 }
-
-
-
-
-
-
-
-
 
 fn get_device_and_queues(
     physical: PhysicalDevice,
