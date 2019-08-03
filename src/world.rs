@@ -45,6 +45,8 @@ pub struct ObjectSpec {
     material: Material,
 }
 
+// will eventually contain a shader and all other info the pipeline needs
+// maybe a MaterialSpec would be useful too, cause it wouldn't require a vulkan instance... idk
 struct Material {
     pub fill_type: PrimitiveTopology,
 }
