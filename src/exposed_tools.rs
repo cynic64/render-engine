@@ -8,8 +8,6 @@ use crate::internal_tools::*;
 pub const CURSOR_RESET_POS_X: u32 = 50;
 pub const CURSOR_RESET_POS_Y: u32 = 50;
 
-pub type VertexBuffer = CpuAccessibleBuffer<[Vertex]>;
-
 extern crate nalgebra_glm as glm;
 use glm::*;
 
@@ -58,6 +56,8 @@ pub struct Vertex {
     pub color: [f32; 3],
     pub normal: [f32; 3],
 }
+
+pub type AbstractVbuf = Arc<BufferAccess + Send + Sync>;
 
 pub fn get_elapsed(start: std::time::Instant) -> f32 {
     start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0

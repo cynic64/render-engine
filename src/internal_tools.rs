@@ -1,4 +1,4 @@
-pub use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
+pub use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 pub use vulkano::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder, DynamicState};
 pub use vulkano::descriptor::{DescriptorSet, PipelineLayoutAbstract};
 pub use vulkano::device::{Device, DeviceExtensions, Queue};

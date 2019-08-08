@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 
+use vulkano::buffer::BufferAccess;
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 
@@ -41,7 +42,7 @@ pub enum Command {
 // contains all the concrete things needed to actually draw the object like
 // the pipeline and vertex shaders
 pub struct ObjectSpec {
-    mesh: Vec<Vertex>,
+    vertices: Vec<Vertex>,
     material: Material,
 }
 
@@ -104,7 +105,7 @@ impl World {
     }
 
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
-        let vbuf = vbuf_from_verts(self.device.clone(), &spec.mesh);
+        let vbuf = vbuf_from_iter(self.device.clone(), spec.vertices.iter().cloned());
 
         let vs = vs::Shader::load(self.device.clone()).unwrap();
         let fs = fs::Shader::load(self.device.clone()).unwrap();
@@ -214,9 +215,9 @@ impl WorldCommunicator {
 }
 
 impl ObjectSpec {
-    pub fn from_mesh(mesh: Vec<Vertex>) -> Self {
+    pub fn from_vertices(vertices: Vec<Vertex>) -> Self {
         Self {
-            mesh,
+            vertices,
             material: Material::default(),
         }
     }
@@ -263,8 +264,13 @@ fn uniform_for_mvp(
     )
 }
 
-fn vbuf_from_verts(device: Arc<Device>, verts: &[Vertex]) -> Arc<VertexBuffer> {
-    CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), verts.iter().cloned()).unwrap()
+fn vbuf_from_iter<I>(device: Arc<Device>, verts: I) -> Arc<dyn BufferAccess + Send + Sync>
+where
+    I: std::iter::ExactSizeIterator,
+    CpuAccessibleBuffer<[<I as std::iter::Iterator>::Item]>: BufferAccess + Send + Sync,
+    <I as std::iter::Iterator>::Item: 'static,
+{
+    CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), verts).unwrap()
 }
 
 pub mod vs {
