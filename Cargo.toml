@@ -5,9 +5,9 @@ authors = ["cynic64 <f3bl@gmx.com>"]
 edition = "2018"
 
 [dependencies]
-vulkano = "0.13"
-vulkano-win = "0.13"
-vulkano-shaders = "0.13"
+vulkano = { path = "../vulkano-master/vulkano" }
+vulkano-win = { path = "../vulkano-master/vulkano-win" }
+vulkano-shaders = { path = "../vulkano-master/vulkano-shaders" }
 winit = "0.19"
 cgmath = "0.17"
 image = "0.21"

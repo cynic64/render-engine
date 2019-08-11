@@ -21,11 +21,11 @@ pub struct World {
     // we store a copy of the sender as well so we can clone it and give it
     // out to whoever needs it
     command_send: Sender<Command>,
-    render_pass: Arc<RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     device: Arc<Device>,
     default_dynstate: DynamicState,
     mvp: MVP,
-    camera: Box<Camera>,
+    camera: Box<dyn Camera>,
 }
 
 #[derive(Clone)]
@@ -46,6 +46,10 @@ pub struct ObjectSpec {
     material: Material,
 }
 
+// pub trait Mesh {
+//     type Vertex = vulkano::memory::Content + Send + Sync + 'static;
+// }
+
 // will eventually contain a shader and all other info the pipeline needs
 // maybe a MaterialSpec would be useful too, cause it wouldn't require a vulkan instance... idk
 struct Material {
@@ -54,9 +58,9 @@ struct Material {
 
 impl World {
     pub fn new(
-        render_pass: Arc<RenderPassAbstract + Send + Sync>,
+        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
         device: Arc<Device>,
-        camera: Box<Camera>,
+        camera: Box<dyn Camera>,
     ) -> Self {
         let (sender, receiver): (Sender<Command>, Receiver<Command>) = mpsc::channel();
 
@@ -92,11 +96,11 @@ impl World {
         }
     }
 
-    pub fn update_render_pass(&mut self, new_renderpass: Arc<RenderPassAbstract + Send + Sync>) {
+    pub fn update_render_pass(&mut self, new_renderpass: Arc<dyn RenderPassAbstract + Send + Sync>) {
         self.render_pass = new_renderpass;
     }
 
-    pub fn update_camera(&mut self, camera: Box<Camera>) {
+    pub fn update_camera(&mut self, camera: Box<dyn Camera>) {
         self.camera = camera;
     }
 
@@ -238,8 +242,8 @@ impl Material {
 fn uniform_for_mvp(
     device: Arc<Device>,
     mvp: &MVP,
-    pipeline: Arc<GraphicsPipelineAbstract + Send + Sync>,
-) -> Arc<DescriptorSet + Send + Sync> {
+    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+) -> Arc<dyn DescriptorSet + Send + Sync> {
     let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(
         device.clone(),
         vulkano::buffer::BufferUsage::all(),
@@ -264,7 +268,7 @@ fn uniform_for_mvp(
     )
 }
 
-fn vbuf_from_vec<V>(device: Arc<Device>, slice: &[V]) -> Arc<BufferAccess + Send + Sync>
+fn vbuf_from_vec<V>(device: Arc<Device>, slice: &[V]) -> Arc<dyn BufferAccess + Send + Sync>
 where
     V: vulkano::memory::Content + Send + Sync + Clone + 'static,
 {

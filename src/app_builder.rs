@@ -17,7 +17,7 @@ impl AppBuilder {
         self
     }
 
-    pub fn with_camera(mut self, camera: Box<Camera>) -> Self {
+    pub fn with_camera(mut self, camera: Box<dyn Camera>) -> Self {
         self.app.update_camera(camera);
         self
     }

@@ -12,7 +12,7 @@ pub struct App {
     physical_device_index: usize,
     device: Arc<Device>,
     queue: Arc<Queue>,
-    render_pass: Arc<RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     pub done: bool,
     pub dimensions: [u32; 2],
     command_buffer: Option<AutoCommandBuffer>,
@@ -119,7 +119,7 @@ impl App {
         }
     }
 
-    pub fn update_camera(&mut self, camera: Box<Camera>) {
+    pub fn update_camera(&mut self, camera: Box<dyn Camera>) {
         self.world.update_camera(camera);
     }
 
@@ -140,7 +140,7 @@ impl App {
         self.update_render_pass();
     }
 
-    pub fn set_render_pass(&mut self, render_pass: Arc<RenderPassAbstract + Send + Sync>) {
+    pub fn set_render_pass(&mut self, render_pass: Arc<dyn RenderPassAbstract + Send + Sync>) {
         self.render_pass = render_pass;
         self.update_render_pass();
     }

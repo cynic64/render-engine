@@ -6,7 +6,7 @@ use vulkano::framebuffer::{LoadOp, RenderPassAbstract, RenderPassDesc};
 
 use std::sync::Arc;
 
-type RenderPass = Arc<RenderPassAbstract + Send + Sync>;
+type RenderPass = Arc<dyn RenderPassAbstract + Send + Sync>;
 
 // TODO: let user provide own format for color buffers
 const DEFAULT_COLOR_FORMAT: Format = vulkano::format::Format::B8G8R8A8Unorm;
@@ -109,7 +109,7 @@ pub fn basic(device: Arc<Device>) -> RenderPass {
 }
 
 pub fn clear_values_for_pass(
-    render_pass: Arc<RenderPassAbstract + Send + Sync>,
+    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
 ) -> Vec<ClearValue> {
     render_pass
         .attachment_descs()
