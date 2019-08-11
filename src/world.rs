@@ -264,11 +264,11 @@ fn uniform_for_mvp(
     )
 }
 
-fn vbuf_from_iter<I>(device: Arc<Device>, verts: I) -> Arc<dyn BufferAccess + Send + Sync>
+fn vbuf_from_iter<I>(device: Arc<Device>, iter: I) -> Arc<dyn BufferAccess + Send + Sync>
 where
     I: std::iter::ExactSizeIterator,
-    CpuAccessibleBuffer<[<I as std::iter::Iterator>::Item]>: BufferAccess + Send + Sync,
-    <I as std::iter::Iterator>::Item: 'static,
+    CpuAccessibleBuffer<[V]>: BufferAccess + Send + Sync,
+    V: 'static,
 {
     CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), verts).unwrap()
 }
