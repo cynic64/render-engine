@@ -105,7 +105,7 @@ impl World {
     }
 
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
-        let vbuf = vbuf_from_iter(self.device.clone(), spec.vertices.iter().cloned());
+        let vbuf = vbuf_from_vec(self.device.clone(), &spec.vertices);
 
         let vs = vs::Shader::load(self.device.clone()).unwrap();
         let fs = fs::Shader::load(self.device.clone()).unwrap();
@@ -264,13 +264,11 @@ fn uniform_for_mvp(
     )
 }
 
-fn vbuf_from_iter<I>(device: Arc<Device>, iter: I) -> Arc<dyn BufferAccess + Send + Sync>
+fn vbuf_from_vec<V>(device: Arc<Device>, slice: &[V]) -> Arc<BufferAccess + Send + Sync>
 where
-    I: std::iter::ExactSizeIterator,
-    CpuAccessibleBuffer<[V]>: BufferAccess + Send + Sync,
-    V: 'static,
+    V: vulkano::memory::Content + Send + Sync + Clone + 'static,
 {
-    CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), verts).unwrap()
+    CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), slice.iter().cloned()).unwrap()
 }
 
 pub mod vs {
