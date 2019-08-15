@@ -1,4 +1,5 @@
 use crate::exposed_tools::*;
+use crate::input::*;
 use crate::internal_tools::*;
 
 use std::collections::HashMap;
@@ -51,7 +52,8 @@ pub trait Mesh {
 }
 
 impl<V> Mesh for Vec<V>
-where V: vulkano::memory::Content + Send + Sync + Clone + 'static,
+where
+    V: vulkano::memory::Content + Send + Sync + Clone + 'static,
 {
     fn create_vbuf(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
         vbuf_from_vec(device, &self)
@@ -104,7 +106,10 @@ impl World {
         }
     }
 
-    pub fn update_render_pass(&mut self, new_renderpass: Arc<dyn RenderPassAbstract + Send + Sync>) {
+    pub fn update_render_pass(
+        &mut self,
+        new_renderpass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    ) {
         self.render_pass = new_renderpass;
     }
 
@@ -154,19 +159,13 @@ impl World {
         self.objects.remove(&id);
     }
 
-    pub fn update(
-        &mut self,
-        events: &[Event],
-        keys_down: &KeysDown,
-        delta: f32,
-        dimensions: [u32; 2],
-    ) {
+    pub fn update(&mut self, frame_info: FrameInfo) {
         self.check_for_commands();
-        self.camera.handle_input(events, keys_down, delta);
+        self.camera.handle_input(frame_info.clone());
         self.mvp.view = self.camera.get_view_matrix();
         self.mvp.proj = self.camera.get_projection_matrix();
         self.update_uniform_buffers();
-        self.update_dynstate(dimensions);
+        self.update_dynstate(frame_info.dimensions);
     }
 
     fn update_uniform_buffers(&mut self) {

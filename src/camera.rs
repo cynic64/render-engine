@@ -3,6 +3,7 @@ extern crate nalgebra_glm as glm;
 use self::glm::*;
 
 use crate::exposed_tools::*;
+use crate::input::*;
 
 pub struct OrbitCamera {
     pub center_position: Vec3,
@@ -69,26 +70,23 @@ impl Camera for OrbitCamera {
         .into()
     }
 
-    fn handle_input(&mut self, events: &[Event], _keys_down: &KeysDown, _delta: f32) {
-        events.iter().for_each(|ev| {
-            if let Some(mouse_movement) = winit_event_to_mouse_movement(ev) {
-                let (x, y) = mouse_movement;
+    fn handle_input(&mut self, frame_info: FrameInfo) {
+        let x = frame_info.mouse_movement[0];
+        let y = frame_info.mouse_movement[1];
 
-                self.pitch += y * self.mouse_sens;
-                self.yaw += x * self.mouse_sens;
-                let halfpi = std::f32::consts::PI / 2.0;
-                let margin = 0.01;
-                let max_pitch = halfpi - margin;
+        self.pitch += y * self.mouse_sens;
+        self.yaw += x * self.mouse_sens;
+        let halfpi = std::f32::consts::PI / 2.0;
+        let margin = 0.01;
+        let max_pitch = halfpi - margin;
 
-                if self.pitch > max_pitch {
-                    self.pitch = max_pitch;
-                } else if self.pitch < -max_pitch {
-                    self.pitch = -max_pitch;
-                }
+        if self.pitch > max_pitch {
+            self.pitch = max_pitch;
+        } else if self.pitch < -max_pitch {
+            self.pitch = -max_pitch;
+        }
 
-                self.update();
-            }
-        });
+        self.update();
     }
 }
 
@@ -167,40 +165,36 @@ impl Camera for FlyCamera {
         look_at(&self.position, &(self.position + self.front), &self.up).into()
     }
 
-    fn handle_input(&mut self, events: &[Event], keys_down: &KeysDown, delta: f32) {
-        events.iter().for_each(|ev| {
-            // check for mouse movement
-            if let Some(mouse_movement) = winit_event_to_mouse_movement(ev) {
-                let (x, y) = mouse_movement;
+    fn handle_input(&mut self, frame_info: FrameInfo) {
+        let x = frame_info.mouse_movement[0];
+        let y = frame_info.mouse_movement[1];
 
-                self.pitch += y * self.mouse_sens;
-                self.yaw += x * self.mouse_sens;
-                let halfpi = std::f32::consts::PI / 2.0;
-                let margin = 0.01;
-                let max_pitch = halfpi - margin;
+        self.pitch += y * self.mouse_sens;
+        self.yaw += x * self.mouse_sens;
+        let halfpi = std::f32::consts::PI / 2.0;
+        let margin = 0.01;
+        let max_pitch = halfpi - margin;
 
-                if self.pitch > max_pitch {
-                    self.pitch = max_pitch;
-                } else if self.pitch < -max_pitch {
-                    self.pitch = -max_pitch;
-                }
+        if self.pitch > max_pitch {
+            self.pitch = max_pitch;
+        } else if self.pitch < -max_pitch {
+            self.pitch = -max_pitch;
+        }
 
-                self.update();
-            }
-        });
+        self.update();
 
         // move if keys are down
-        if keys_down.w {
-            self.move_forward(delta);
+        if frame_info.keys_down.w {
+            self.move_forward(frame_info.delta);
         }
-        if keys_down.a {
-            self.move_left(delta);
+        if frame_info.keys_down.a {
+            self.move_left(frame_info.delta);
         }
-        if keys_down.s {
-            self.move_backward(delta);
+        if frame_info.keys_down.s {
+            self.move_backward(frame_info.delta);
         }
-        if keys_down.d {
-            self.move_right(delta);
+        if frame_info.keys_down.d {
+            self.move_right(frame_info.delta);
         }
     }
 }
@@ -216,5 +210,5 @@ impl Camera for OrthoCamera {
         Mat4::identity().into()
     }
 
-    fn handle_input(&mut self, _events: &[Event], _keys_down: &KeysDown, _delta: f32) {}
+    fn handle_input(&mut self, _frame_info: FrameInfo) {}
 }

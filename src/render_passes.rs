@@ -120,7 +120,7 @@ pub fn clear_values_for_pass(
                 _ => panic!("You provided a format that the clear values couldn't be guessed for!"),
             },
             LoadOp::DontCare => ClearValue::None,
-            _ => panic!("Guessing clear values for Load attachments is unsupported")
-        } )
+            _ => panic!("Guessing clear values for Load attachments is unsupported"),
+        })
         .collect()
 }

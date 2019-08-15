@@ -5,6 +5,8 @@ pub use winit::VirtualKeyCode;
 
 use crate::internal_tools::*;
 
+use crate::input::FrameInfo;
+
 pub const CURSOR_RESET_POS_X: u32 = 50;
 pub const CURSOR_RESET_POS_Y: u32 = 50;
 
@@ -12,36 +14,6 @@ extern crate nalgebra_glm as glm;
 use glm::*;
 
 pub type CameraMatrix = [[f32; 4]; 4];
-
-#[derive(Clone)]
-pub struct KeysDown {
-    pub a: bool,
-    pub b: bool,
-    pub c: bool,
-    pub d: bool,
-    pub e: bool,
-    pub f: bool,
-    pub g: bool,
-    pub h: bool,
-    pub i: bool,
-    pub j: bool,
-    pub k: bool,
-    pub l: bool,
-    pub m: bool,
-    pub n: bool,
-    pub o: bool,
-    pub p: bool,
-    pub q: bool,
-    pub r: bool,
-    pub s: bool,
-    pub t: bool,
-    pub u: bool,
-    pub v: bool,
-    pub w: bool,
-    pub x: bool,
-    pub y: bool,
-    pub z: bool,
-}
 
 pub struct KeyboardEvent {}
 
@@ -61,39 +33,6 @@ pub type AbstractVbuf = Arc<dyn BufferAccess + Send + Sync>;
 
 pub fn get_elapsed(start: std::time::Instant) -> f32 {
     start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0
-}
-
-impl KeysDown {
-    pub fn all_false() -> Self {
-        KeysDown {
-            a: false,
-            b: false,
-            c: false,
-            d: false,
-            e: false,
-            f: false,
-            g: false,
-            h: false,
-            i: false,
-            j: false,
-            k: false,
-            l: false,
-            m: false,
-            n: false,
-            o: false,
-            p: false,
-            q: false,
-            r: false,
-            s: false,
-            t: false,
-            u: false,
-            v: false,
-            w: false,
-            x: false,
-            y: false,
-            z: false,
-        }
-    }
 }
 
 pub trait Camera {
@@ -116,7 +55,7 @@ pub trait Camera {
     }
 
     #[allow(unused_variables)]
-    fn handle_input(&mut self, events: &[Event], keys_down: &KeysDown, delta: f32) {}
+    fn handle_input(&mut self, frame_info: FrameInfo) {}
 }
 
 pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {
@@ -136,7 +75,7 @@ pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {
     }
 }
 
-pub fn winit_event_to_mouse_movement(event: &Event) -> Option<(f32, f32)> {
+pub fn winit_event_to_cursor_position(event: &Event) -> Option<[f32; 2]> {
     if let Event::WindowEvent {
         event: WindowEvent::CursorMoved { position: p, .. },
         ..
@@ -149,7 +88,7 @@ pub fn winit_event_to_mouse_movement(event: &Event) -> Option<(f32, f32)> {
         let x_movement = x_diff as f32;
         let y_movement = y_diff as f32;
 
-        Some((x_movement, y_movement))
+        Some([x_movement, y_movement])
     } else {
         None
     }
