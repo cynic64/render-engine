@@ -42,13 +42,21 @@ pub enum Command {
 // contains all the concrete things needed to actually draw the object like
 // the pipeline and vertex shaders
 pub struct ObjectSpec {
-    vertices: Vec<Vertex>,
+    mesh: Box<dyn Mesh>,
     material: Material,
 }
 
-// pub trait Mesh {
-//     type Vertex = vulkano::memory::Content + Send + Sync + 'static;
-// }
+pub trait Mesh {
+    fn create_vbuf(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
+}
+
+impl<V> Mesh for Vec<V>
+where V: vulkano::memory::Content + Send + Sync + Clone + 'static,
+{
+    fn create_vbuf(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
+        vbuf_from_vec(device, &self)
+    }
+}
 
 // will eventually contain a shader and all other info the pipeline needs
 // maybe a MaterialSpec would be useful too, cause it wouldn't require a vulkan instance... idk
@@ -109,7 +117,7 @@ impl World {
     }
 
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
-        let vbuf = vbuf_from_vec(self.device.clone(), &spec.vertices);
+        let vbuf = spec.mesh.create_vbuf(self.device.clone());
 
         let vs = vs::Shader::load(self.device.clone()).unwrap();
         let fs = fs::Shader::load(self.device.clone()).unwrap();
@@ -219,9 +227,9 @@ impl WorldCommunicator {
 }
 
 impl ObjectSpec {
-    pub fn from_vertices(vertices: Vec<Vertex>) -> Self {
+    pub fn from_mesh<M: Mesh + 'static>(mesh: M) -> Self {
         Self {
-            vertices,
+            mesh: Box::new(mesh),
             material: Material::default(),
         }
     }
