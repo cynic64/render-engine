@@ -5,15 +5,16 @@ authors = ["cynic64 <f3bl@gmx.com>"]
 edition = "2018"
 
 [dependencies]
-vulkano = { path = "../vulkano-master/vulkano" }
-vulkano-win = { path = "../vulkano-master/vulkano-win" }
-vulkano-shaders = { path = "../vulkano-master/vulkano-shaders" }
+vulkano = "0.14"
+vulkano-win = "0.14"
+vulkano-shaders = "0.14"
 winit = "0.19"
 cgmath = "0.17"
 image = "0.21"
 time = "0.1.38"
 nalgebra-glm = "0.4"
 re-ll = { path = "../re-ll" }
+shade_runner = { path = "../shade_runner" }
 
 [profile.release]
 debug = true

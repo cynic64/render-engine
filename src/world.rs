@@ -1,10 +1,12 @@
 use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
+use crate::shaders::*;
 
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::path::Path;
 
 use vulkano::buffer::BufferAccess;
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
@@ -27,6 +29,8 @@ pub struct World {
     default_dynstate: DynamicState,
     mvp: MVP,
     camera: Box<dyn Camera>,
+    default_vs: Shader,
+    default_fs: Shader,
 }
 
 #[derive(Clone)]
@@ -94,6 +98,22 @@ impl World {
             proj: camera.get_projection_matrix(),
         };
 
+        let vert_path = Path::new(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/examples/vulkan/shaders/vert.glsl"
+            )
+        );
+
+        let frag_path = Path::new(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/examples/vulkan/shaders/frag.glsl"
+            )
+        );
+
+        let (vs, fs) = Shader::load_from_file(device.clone(), &vert_path, &frag_path);
+
         Self {
             objects: HashMap::new(),
             command_recv: Some(receiver),
@@ -103,6 +123,8 @@ impl World {
             default_dynstate: dynamic_state,
             mvp,
             camera,
+            default_vs: vs,
+            default_fs: fs,
         }
     }
 
@@ -124,15 +146,36 @@ impl World {
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
         let vbuf = spec.mesh.create_vbuf(self.device.clone());
 
-        let vs = vs::Shader::load(self.device.clone()).unwrap();
-        let fs = fs::Shader::load(self.device.clone()).unwrap();
+        let vs_entry = self.default_vs.entry.clone();
+        let fs_entry = self.default_fs.entry.clone();
+
+        let vert_main = unsafe {
+            self.default_vs.module.graphics_entry_point(
+                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
+                vs_entry.vert_input,
+                vs_entry.vert_output,
+                vs_entry.vert_layout,
+                vulkano::pipeline::shader::GraphicsShaderType::Vertex,
+            )
+        };
+
+        let frag_main = unsafe {
+            self.default_fs.module.graphics_entry_point(
+                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
+                fs_entry.vert_input,
+                fs_entry.vert_output,
+                fs_entry.vert_layout,
+                vulkano::pipeline::shader::GraphicsShaderType::Fragment,
+            )
+        };
+
         let pipeline = Arc::new(
             GraphicsPipeline::start()
                 .vertex_input_single_buffer::<Vertex>()
-                .vertex_shader(vs.main_entry_point(), ())
+                .vertex_shader(vert_main, ())
                 .primitive_topology(spec.material.fill_type)
                 .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(fs.main_entry_point(), ())
+                .fragment_shader(frag_main, ())
                 .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
                 .depth_stencil_simple_depth()
                 .build(self.device.clone())
@@ -251,14 +294,14 @@ fn uniform_for_mvp(
     mvp: &MVP,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
 ) -> Arc<dyn DescriptorSet + Send + Sync> {
-    let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<vs::ty::Data>::new(
+    let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
         device.clone(),
         vulkano::buffer::BufferUsage::all(),
     );
 
     let uniform_buffer_subbuffer = {
-        let uniform_data = vs::ty::Data {
-            world: mvp.model,
+        let uniform_data = MVP {
+            model: mvp.model,
             view: mvp.view,
             proj: mvp.proj,
         };
@@ -280,54 +323,4 @@ where
     V: vulkano::memory::Content + Send + Sync + Clone + 'static,
 {
     CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), slice.iter().cloned()).unwrap()
-}
-
-pub mod vs {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        src: "
-            #version 450
-
-            layout(location = 0) in vec3 position;
-            layout(location = 1) in vec3 color;
-            layout(location = 2) in vec3 normal;
-            layout(location = 0) out vec3 v_color;
-            layout(location = 1) out vec3 v_normal;
-
-            layout(set = 0, binding = 0) uniform Data {
-                mat4 world;
-                mat4 view;
-                mat4 proj;
-            } uniforms;
-
-            void main() {
-                mat4 worldview = uniforms.view * uniforms.world;
-                gl_Position = uniforms.proj * worldview * vec4(position, 1.0);
-                v_color = color;
-                v_normal = normal;
-            }"
-    }
-}
-
-mod fs {
-    vulkano_shaders::shader! {
-        ty: "fragment",
-        src: "
-            #version 450
-
-            layout(location = 0) in vec3 v_color;
-            layout(location = 1) in vec3 v_normal;
-            layout(location = 0) out vec4 f_color;
-
-            const vec3 LIGHT = vec3(3.0, 2.0, 1.0);
-
-            void main() {
-                float brightness = dot(normalize(v_normal), normalize(LIGHT));
-                vec3 dark_color = v_color * 0.6;
-                vec3 regular_color = v_color;
-
-                f_color = vec4(mix(dark_color, regular_color, brightness), 1.0);
-            }
-            "
-    }
 }
