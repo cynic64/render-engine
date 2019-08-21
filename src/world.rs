@@ -29,8 +29,6 @@ pub struct World {
     default_dynstate: DynamicState,
     mvp: MVP,
     camera: Box<dyn Camera>,
-    default_vs: Shader,
-    default_fs: Shader,
 }
 
 #[derive(Clone)]
@@ -68,6 +66,8 @@ where
 // maybe a MaterialSpec would be useful too, cause it wouldn't require a vulkan instance... idk
 struct Material {
     pub fill_type: PrimitiveTopology,
+    pub vs: Shader,
+    pub fs: Shader,
 }
 
 impl World {
@@ -98,22 +98,6 @@ impl World {
             proj: camera.get_projection_matrix(),
         };
 
-        let vert_path = Path::new(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/examples/vulkan/shaders/vert.glsl"
-            )
-        );
-
-        let frag_path = Path::new(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/examples/vulkan/shaders/frag.glsl"
-            )
-        );
-
-        let (vs, fs) = Shader::load_from_file(device.clone(), &vert_path, &frag_path);
-
         Self {
             objects: HashMap::new(),
             command_recv: Some(receiver),
@@ -123,8 +107,6 @@ impl World {
             default_dynstate: dynamic_state,
             mvp,
             camera,
-            default_vs: vs,
-            default_fs: fs,
         }
     }
 
@@ -146,11 +128,11 @@ impl World {
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
         let vbuf = spec.mesh.create_vbuf(self.device.clone());
 
-        let vs_entry = self.default_vs.entry.clone();
-        let fs_entry = self.default_fs.entry.clone();
+        let vs_entry = spec.material.vs.entry.clone();
+        let fs_entry = spec.material.fs.entry.clone();
 
         let vert_main = unsafe {
-            self.default_vs.module.graphics_entry_point(
+            spec.material.vs.module.graphics_entry_point(
                 std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
                 vs_entry.vert_input,
                 vs_entry.vert_output,
@@ -160,11 +142,11 @@ impl World {
         };
 
         let frag_main = unsafe {
-            self.default_fs.module.graphics_entry_point(
+            spec.material.fs.module.graphics_entry_point(
                 std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
-                fs_entry.vert_input,
-                fs_entry.vert_output,
-                fs_entry.vert_layout,
+                fs_entry.frag_input,
+                fs_entry.frag_output,
+                fs_entry.frag_layout,
                 vulkano::pipeline::shader::GraphicsShaderType::Fragment,
             )
         };
@@ -269,22 +251,49 @@ impl WorldCommunicator {
 }
 
 impl ObjectSpec {
-    pub fn from_mesh<M: Mesh + 'static>(mesh: M) -> Self {
+    // TODO: use the builder pattern instead of this crap
+    pub fn from_mesh<M: Mesh + 'static>(device: Arc<Device>, mesh: M) -> Self {
         Self {
             mesh: Box::new(mesh),
-            material: Material::default(),
+            material: Material::default(device),
         }
     }
 
     pub fn switch_fill_type(&mut self, new_primitive_topology: PrimitiveTopology) {
         self.material.fill_type = new_primitive_topology;
     }
+
+    pub fn change_shaders(&mut self, vs: Shader, fs: Shader) {
+        self.material.vs = vs;
+        self.material.fs = fs;
+    }
 }
 
 impl Material {
-    pub fn default() -> Self {
+    pub fn default(device: Arc<Device>) -> Self {
+        // TODO: come up with a better way to do this that doesn't re-load the
+        // default shaders a million times
+        let vert_path = Path::new(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/shaders/vert.glsl"
+            )
+        );
+
+
+        let frag_path = Path::new(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/shaders/frag.glsl"
+            )
+        );
+
+        let (vs, fs) = Shader::load_from_file(device.clone(), &vert_path, &frag_path);
+
         Self {
             fill_type: PrimitiveTopology::TriangleList,
+            vs,
+            fs,
         }
     }
 }

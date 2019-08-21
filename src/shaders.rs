@@ -8,6 +8,7 @@ use shade_runner::{Entry, load, parse};
 use std::path::Path;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct Shader {
     pub module: Arc<ShaderModule>,
     pub entry: Entry,
