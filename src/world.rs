@@ -251,35 +251,6 @@ impl WorldCommunicator {
     }
 }
 
-impl Material {
-    pub fn default(device: Arc<Device>) -> Self {
-        // TODO: come up with a better way to do this that doesn't re-load the
-        // default shaders a million times
-        let vert_path = Path::new(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/shaders/vert.glsl"
-            )
-        );
-
-
-        let frag_path = Path::new(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/shaders/frag.glsl"
-            )
-        );
-
-        let (vs, fs) = Shader::load_from_file(device.clone(), &vert_path, &frag_path);
-
-        Self {
-            fill_type: PrimitiveTopology::TriangleList,
-            vs,
-            fs,
-        }
-    }
-}
-
 fn uniform_for_mvp(
     device: Arc<Device>,
     mvp: &MVP,
