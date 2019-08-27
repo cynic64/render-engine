@@ -2,6 +2,7 @@ use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
 use crate::shaders::*;
+use crate::mesh_gen;
 
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -250,25 +251,6 @@ impl WorldCommunicator {
     }
 }
 
-impl ObjectSpec {
-    // TODO: use the builder pattern instead of this crap
-    pub fn from_mesh<M: Mesh + 'static>(device: Arc<Device>, mesh: M) -> Self {
-        Self {
-            mesh: Box::new(mesh),
-            material: Material::default(device),
-        }
-    }
-
-    pub fn switch_fill_type(&mut self, new_primitive_topology: PrimitiveTopology) {
-        self.material.fill_type = new_primitive_topology;
-    }
-
-    pub fn change_shaders(&mut self, vs: Shader, fs: Shader) {
-        self.material.vs = vs;
-        self.material.fs = fs;
-    }
-}
-
 impl Material {
     pub fn default(device: Arc<Device>) -> Self {
         // TODO: come up with a better way to do this that doesn't re-load the
@@ -332,4 +314,72 @@ where
     V: vulkano::memory::Content + Send + Sync + Clone + 'static,
 {
     CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), slice.iter().cloned()).unwrap()
+}
+
+pub struct ObjectSpecBuilder {
+    custom_mesh: Option<Box<dyn Mesh>>,
+    custom_fill_type: Option<PrimitiveTopology>,
+    custom_shaders: Option<(Shader, Shader)>,
+}
+
+impl ObjectSpecBuilder {
+    pub fn default() -> Self {
+        Self {
+            custom_mesh: None,
+            custom_fill_type: None,
+            custom_shaders: None,
+        }
+    }
+
+    pub fn mesh<M: Mesh + 'static>(self, mesh: M) -> Self {
+        Self {
+            custom_mesh: Some(Box::new(mesh)),
+            ..self
+        }
+    }
+
+    pub fn shaders(self, vs: Shader, fs: Shader) -> Self {
+        Self {
+            custom_shaders: Some((vs, fs)),
+            ..self
+        }
+    }
+
+    pub fn build(self, device: Arc<Device>) -> ObjectSpec {
+        let fill_type = self.custom_fill_type.unwrap_or(PrimitiveTopology::TriangleList);
+
+        // if you choose to customize shaders, you need to provide both
+        let (vs, fs) = self.custom_shaders.unwrap_or_else(|| {
+            let vert_path = Path::new(
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/shaders/vert.glsl"
+                )
+            );
+
+
+            let frag_path = Path::new(
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/shaders/frag.glsl"
+                )
+            );
+
+            Shader::load_from_file(device.clone(), &vert_path, &frag_path)
+        });
+
+        let material = Material {
+            fill_type,
+            vs,
+            fs,
+        };
+
+        // if no mesh is provided, load a cube
+        let mesh = self.custom_mesh.unwrap_or_else(|| Box::new(mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0, [1.0, 1.0, 1.0])));
+
+        ObjectSpec {
+            mesh,
+            material,
+        }
+    }
 }

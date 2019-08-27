@@ -17,6 +17,7 @@ pub use app_builder::AppBuilder;
 
 pub mod world;
 pub use world::ObjectSpec;
+pub use world::ObjectSpecBuilder;
 pub use world::World;
 pub use world::WorldCommunicator;
 
