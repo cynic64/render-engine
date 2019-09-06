@@ -17,7 +17,6 @@ pub struct App {
     pub done: bool,
     command_buffer: Option<AutoCommandBuffer>,
     multisampling_enabled: bool,
-    // MVP
     world: World,
     vk_window: ll::vk_window::VkWindow,
 }
@@ -213,18 +212,6 @@ fn get_instance() -> Arc<Instance> {
 }
 
 fn get_physical_device(instance: &Arc<Instance>) -> PhysicalDevice {
-    // In a real application, there are three things to take into consideration:
-    //
-    // - Some devices may not support some of the optional features that may be required by your
-    //   application. You should filter out the devices that don't support your app.
-    //
-    // - Not all devices can draw to a certain surface. Once you create your window, you have to
-    //   choose a device that is capable of drawing to it.
-    //
-    // - You probably want to leave the choice between the remaining devices to the user.
-    //
-    // For the sake of the example we are just going to use the first device, which should work
-    // most of the time.
     PhysicalDevice::enumerate(&instance).next().unwrap()
 }
 
@@ -232,16 +219,6 @@ fn get_device_and_queues(
     physical: PhysicalDevice,
     surface: Arc<Surface<Window>>,
 ) -> (Arc<Device>, vulkano::device::QueuesIter) {
-    // The next step is to choose which GPU queue will execute our draw commands.
-    //
-    // Devices can provide multiple queues to run commands in parallel (for example a draw queue
-    // and a compute queue), similar to CPU threads. This is something you have to have to manage
-    // manually in Vulkan.
-    //
-    // In a real-life application, we would probably use at least a graphics queue and a transfers
-    // queue to handle data transfers in parallel. In this example we only use one queue.
-    //
-    // We have to choose which queues to use early on, because we will need this info very soon.
     let queue_family = physical
         .queue_families()
         .find(|&q| {
@@ -249,32 +226,10 @@ fn get_device_and_queues(
             q.supports_graphics() && surface.is_supported(q).unwrap_or(false)
         })
         .unwrap();
-
-    // Now initializing the device. This is probably the most important object of Vulkan.
-    //
-    // We have to pass five parameters when creating a device:
-    //
-    // - Which physical device to connect to.
-    //
-    // - A list of optional features and extensions that our program needs to work correctly.
-    //   Some parts of the Vulkan specs are optional and must be enabled manually at device
-    //   creation. In this example the only thing we are going to need is the `khr_swapchain`
-    //   extension that allows us to draw to a window.
-    //
-    // - A list of layers to enable. This is very niche, and you will usually pass `None`.
-    //
-    // - The list of queues that we are going to use. The exact parameter is an iterator whose
-    //   items are `(Queue, f32)` where the floating-point represents the priority of the queue
-    //   between 0.0 and 1.0. The priority of the queue is a hint to the implementation about how
-    //   much it should prioritize queues between one another.
-    //
-    // The list of created queues is returned by the function alongside with the device.
     let device_ext = DeviceExtensions {
         khr_swapchain: true,
         ..DeviceExtensions::none()
     };
-    // let (device, mut queues) = Device::new(physical, physical.supported_features(), &device_ext,
-    //     [(queue_family, 0.5)].iter().cloned()).unwrap();
     Device::new(
         physical,
         physical.supported_features(),
@@ -282,54 +237,4 @@ fn get_device_and_queues(
         [(queue_family, 0.5)].iter().cloned(),
     )
     .unwrap()
-}
-
-mod vs {
-    vulkano_shaders::shader! {
-        ty: "vertex",
-        src: "
-            #version 450
-
-            layout(location = 0) in vec3 position;
-            layout(location = 1) in vec3 color;
-            layout(location = 2) in vec3 normal;
-            layout(location = 0) out vec3 v_color;
-            layout(location = 1) out vec3 v_normal;
-
-            layout(set = 0, binding = 0) uniform Data {
-                mat4 world;
-                mat4 view;
-                mat4 proj;
-            } uniforms;
-
-            void main() {
-                mat4 worldview = uniforms.view * uniforms.world;
-                gl_Position = uniforms.proj * worldview * vec4(position, 1.0);
-                v_color = color;
-                v_normal = normal;
-            }"
-    }
-}
-
-mod fs {
-    vulkano_shaders::shader! {
-        ty: "fragment",
-        src: "
-            #version 450
-
-            layout(location = 0) in vec3 v_color;
-            layout(location = 1) in vec3 v_normal;
-            layout(location = 0) out vec4 f_color;
-
-            const vec3 LIGHT = vec3(3.0, 2.0, 1.0);
-
-            void main() {
-                float brightness = dot(normalize(v_normal), normalize(LIGHT));
-                vec3 dark_color = v_color * 0.6;
-                vec3 regular_color = v_color;
-
-                f_color = vec4(mix(dark_color, regular_color, brightness), 1.0);
-            }
-            "
-    }
 }
