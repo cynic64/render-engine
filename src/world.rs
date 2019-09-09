@@ -27,7 +27,6 @@ pub struct World {
     command_send: Sender<Command>,
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     device: Arc<Device>,
-    default_dynstate: DynamicState,
     mvp: MVP,
     camera: Box<dyn Camera>,
 }
@@ -79,18 +78,6 @@ impl World {
     ) -> Self {
         let (sender, receiver): (Sender<Command>, Receiver<Command>) = mpsc::channel();
 
-        // set the dynamic state to a dummy value
-        let viewport = Viewport {
-            origin: [0.0, 0.0],
-            dimensions: [0.0, 0.0],
-            depth_range: 0.0..1.0,
-        };
-        let dynamic_state = DynamicState {
-            line_width: None,
-            viewports: Some(vec![viewport]),
-            scissors: None,
-        };
-
         let model: CameraMatrix =
             glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
         let mvp = MVP {
@@ -105,7 +92,6 @@ impl World {
             command_send: sender,
             render_pass,
             device,
-            default_dynstate: dynamic_state,
             mvp,
             camera,
         }
@@ -166,8 +152,6 @@ impl World {
                 .unwrap(),
         );
 
-        // let uniform_set = uniform_for_mvp(self.device.clone(), &self.mvp, pipeline.clone());
-
         let object = RenderableObject {
             pipeline,
             vbuf,
@@ -189,39 +173,6 @@ impl World {
         self.camera.handle_input(frame_info.clone());
         self.mvp.view = self.camera.get_view_matrix();
         self.mvp.proj = self.camera.get_projection_matrix();
-        self.update_uniform_buffers();
-        self.update_dynstate(frame_info.dimensions);
-    }
-
-    fn update_uniform_buffers(&mut self) {
-        /*
-        let mvp = self.mvp.clone();
-        let device = self.device.clone();
-        self.objects.values_mut().for_each(|x| {
-            x.uniform_set = uniform_for_mvp(device.clone(), &mvp, x.pipeline.clone());
-        });
-         */
-        println!("update_uniform_buffers does nothing right now, sorry");
-    }
-
-    fn update_dynstate(&mut self, dimensions: [u32; 2]) {
-        /*
-        let viewport = Viewport {
-            origin: [0.0, 0.0],
-            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
-            depth_range: 0.0..1.0,
-        };
-        let dynamic_state = DynamicState {
-            line_width: None,
-            viewports: Some(vec![viewport]),
-            scissors: None,
-        };
-        self.default_dynstate = dynamic_state.clone();
-        self.objects
-            .values_mut()
-            .for_each(|x| x.dynamic_state = dynamic_state.clone());
-        */
-        println!("update_uniform_buffers does nothing right now, sorry");
     }
 
     fn check_for_commands(&mut self) {
@@ -254,35 +205,6 @@ impl WorldCommunicator {
 
         self.command_send.send(command).unwrap();
     }
-}
-
-fn uniform_for_mvp(
-    device: Arc<Device>,
-    mvp: &MVP,
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-) -> Arc<dyn DescriptorSet + Send + Sync> {
-    let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
-        device.clone(),
-        vulkano::buffer::BufferUsage::all(),
-    );
-
-    let uniform_buffer_subbuffer = {
-        let uniform_data = MVP {
-            model: mvp.model,
-            view: mvp.view,
-            proj: mvp.proj,
-        };
-
-        uniform_buffer.next(uniform_data).unwrap()
-    };
-
-    Arc::new(
-        vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(pipeline.clone(), 0)
-            .add_buffer(uniform_buffer_subbuffer)
-            .unwrap()
-            .build()
-            .unwrap(),
-    )
 }
 
 fn vbuf_from_vec<V>(device: Arc<Device>, slice: &[V]) -> Arc<dyn BufferAccess + Send + Sync>

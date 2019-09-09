@@ -7,7 +7,6 @@ use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract, RenderPassDesc,
 };
 use vulkano::image::AttachmentImage;
-use vulkano::swapchain::Swapchain;
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
