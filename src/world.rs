@@ -9,16 +9,16 @@ use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::path::Path;
 
+use crate::system::RenderableObject;
+
 use vulkano::buffer::BufferAccess;
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 
-use ll::command_buffer::ConcreteObject;
-
 extern crate nalgebra_glm as glm;
 
 pub struct World {
-    objects: HashMap<String, ConcreteObject>,
+    objects: HashMap<String, RenderableObject>,
     // we need to use an option to get around the borrow checker later
     // soooooorry
     command_recv: Option<Receiver<Command>>,
@@ -129,6 +129,7 @@ impl World {
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
         let vbuf = spec.mesh.create_vbuf(self.device.clone());
 
+        // TODO: put this in Shader?
         let vs_entry = spec.material.vs.entry.clone();
         let fs_entry = spec.material.fs.entry.clone();
 
@@ -165,19 +166,17 @@ impl World {
                 .unwrap(),
         );
 
-        let uniform_set = uniform_for_mvp(self.device.clone(), &self.mvp, pipeline.clone());
+        // let uniform_set = uniform_for_mvp(self.device.clone(), &self.mvp, pipeline.clone());
 
-        let object = ConcreteObject {
+        let object = RenderableObject {
             pipeline,
-            dynamic_state: self.default_dynstate.clone(),
-            vertex_buffer: vbuf,
-            uniform_set,
+            vbuf,
         };
 
         self.objects.insert(id, object);
     }
 
-    pub fn get_objects(&self) -> Vec<ConcreteObject> {
+    pub fn get_objects(&self) -> Vec<RenderableObject> {
         self.objects.values().map(|x| x.clone()).collect()
     }
 
@@ -195,14 +194,18 @@ impl World {
     }
 
     fn update_uniform_buffers(&mut self) {
+        /*
         let mvp = self.mvp.clone();
         let device = self.device.clone();
         self.objects.values_mut().for_each(|x| {
             x.uniform_set = uniform_for_mvp(device.clone(), &mvp, x.pipeline.clone());
         });
+         */
+        println!("update_uniform_buffers does nothing right now, sorry");
     }
 
     fn update_dynstate(&mut self, dimensions: [u32; 2]) {
+        /*
         let viewport = Viewport {
             origin: [0.0, 0.0],
             dimensions: [dimensions[0] as f32, dimensions[1] as f32],
@@ -217,6 +220,8 @@ impl World {
         self.objects
             .values_mut()
             .for_each(|x| x.dynamic_state = dynamic_state.clone());
+        */
+        println!("update_uniform_buffers does nothing right now, sorry");
     }
 
     fn check_for_commands(&mut self) {
@@ -324,7 +329,7 @@ impl ObjectSpecBuilder {
             let vert_path = Path::new(
                 concat!(
                     env!("CARGO_MANIFEST_DIR"),
-                    "/shaders/vert.glsl"
+                    "/shaders/deferred/default_geo_vert.glsl"
                 )
             );
 
@@ -332,7 +337,7 @@ impl ObjectSpecBuilder {
             let frag_path = Path::new(
                 concat!(
                     env!("CARGO_MANIFEST_DIR"),
-                    "/shaders/frag.glsl"
+                    "/shaders/deferred/default_geo_frag.glsl"
                 )
             );
 

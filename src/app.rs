@@ -6,8 +6,9 @@ use crate::input::*;
 use crate::internal_tools::*;
 use crate::render_passes;
 use crate::world::*;
+use crate::system;
 
-pub struct App {
+pub struct App<'a> {
     instance: Arc<Instance>,
     events_handler: EventHandler,
     physical_device_index: usize,
@@ -19,11 +20,21 @@ pub struct App {
     multisampling_enabled: bool,
     world: World,
     vk_window: ll::vk_window::VkWindow,
+
+    lighting_renderable_objects: Vec<system::RenderableObject>,
+
+    system: system::System<'a>,
 }
+
+#[derive(Default, Copy, Clone)]
+struct SimpleVertex {
+    position: [f32; 2],
+}
+vulkano::impl_vertex!(SimpleVertex, position);
 
 const MULTISAMPLING_FACTOR: u32 = 4;
 
-impl App {
+impl<'a> App<'a> {
     pub fn new() -> Self {
         let instance = get_instance();
         let physical = get_physical_device(&instance);
@@ -67,22 +78,129 @@ impl App {
         // is the multisampled one.
         let render_pass = render_passes::basic(device.clone());
 
+        let camera = OrbitCamera::default();
+
+        let world = World::new(render_pass.clone(), device.clone(), Box::new(camera));
+
+        // set up lighting stage
+        let lighting_vbuf = {
+            vulkano::buffer::CpuAccessibleBuffer::from_iter(
+                device.clone(),
+                BufferUsage::all(),
+                [
+                    SimpleVertex {
+                        position: [-1.0, -1.0],
+                    },
+                    SimpleVertex {
+                        position: [-1.0, 1.0],
+                    },
+                    SimpleVertex {
+                        position: [1.0, -1.0],
+                    },
+                    SimpleVertex {
+                        position: [1.0, 1.0],
+                    },
+                ]
+                .iter()
+                .cloned(),
+            )
+            .unwrap()
+        };
+
+        let lighting_render_pass = Arc::new(
+            vulkano::single_pass_renderpass!(
+                device.clone(),
+                attachments: {
+                    color: {
+                        load: Clear,
+                        store: Store,
+                        format: vulkano::format::Format::B8G8R8A8Unorm,
+                        samples: 1,
+                    }
+                },
+                pass: {
+                    color: [color],
+                    depth_stencil: {}
+                }
+            )
+            .unwrap(),
+        );
+
+        use crate::shaders::Shader;
+        use std::path::Path;
+
+        let vert_path = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/deferred/default_lighting_vert.glsl"
+        ));
+
+        let frag_path = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/deferred/default_lighting_frag.glsl"
+        ));
+
+        let (vs, fs) = Shader::load_from_file(device.clone(), &vert_path, &frag_path);
+
+        let vs_entry = vs.entry.clone();
+        let fs_entry = fs.entry.clone();
+
+        // add helpers for this in Shaders
+        let vert_main = unsafe {
+            vs.module.graphics_entry_point(
+                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
+                vs_entry.vert_input,
+                vs_entry.vert_output,
+                vs_entry.vert_layout,
+                vulkano::pipeline::shader::GraphicsShaderType::Vertex,
+            )
+        };
+
+        let frag_main = unsafe {
+            fs.module.graphics_entry_point(
+                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
+                fs_entry.frag_input,
+                fs_entry.frag_output,
+                fs_entry.frag_layout,
+                vulkano::pipeline::shader::GraphicsShaderType::Fragment,
+            )
+        };
+
+        let lighting_pipeline = Arc::new(
+            vulkano::pipeline::GraphicsPipeline::start()
+                .vertex_input_single_buffer::<SimpleVertex>()
+                .vertex_shader(vert_main, ())
+                .triangle_strip()
+                .viewports_dynamic_scissors_irrelevant(1)
+                .fragment_shader(frag_main, ())
+                .render_pass(Subpass::from(lighting_render_pass.clone(), 0).unwrap())
+                .build(device.clone())
+                .unwrap(),
+        );
+
+        let square = system::RenderableObject {
+            pipeline: lighting_pipeline,
+            vbuf: lighting_vbuf,
+        };
+
         let vk_window = ll::vk_window::VkWindow::new(
             device.clone(),
             queue.clone(),
             surface.clone(),
-            render_pass.clone(),
+            lighting_render_pass.clone(),
             swapchain_caps.clone(),
         );
-        // Initialization is finally finished!
 
-        // In the loop below we are going to submit commands to the GPU. Submitting a command produces
-        // an object that implements the `GpuFuture` trait, which holds the resources for as long as
-        // they are in use by the GPU.
-
-        let camera = OrbitCamera::default();
-
-        let world = World::new(render_pass.clone(), device.clone(), Box::new(camera));
+        let pass1 = system::Pass {
+            images_created: vec!["geo_color", "geo_depth"],
+            images_needed: vec![],
+            render_pass: render_pass.clone(),
+        };
+        let pass2 = system::Pass {
+            images_created: vec!["lighting_color"],
+            images_needed: vec!["geo_color"],
+            render_pass: lighting_render_pass.clone(),
+        };
+        let system = system::System::new(device.clone(), vec![pass1, pass2]);
 
         Self {
             instance: instance.clone(),
@@ -96,6 +214,9 @@ impl App {
             multisampling_enabled,
             world,
             vk_window,
+
+            lighting_renderable_objects: vec![square],
+            system,
         }
     }
 
@@ -127,8 +248,10 @@ impl App {
 
     fn update_render_pass(&mut self) {
         // call this whenever you change the renderr pass
-        self.vk_window.update_render_pass(self.render_pass.clone());
-        self.vk_window.rebuild();
+        // commented out because of testing the deferred pipeline
+        // self.vk_window.update_render_pass(self.render_pass.clone());
+        // self.vk_window.rebuild();
+        println!("You shouldn't be calling update_render_pass, it's broken atm!");
         self.world.update_render_pass(self.render_pass.clone());
     }
 
@@ -173,17 +296,124 @@ impl App {
     }
 
     fn create_command_buffer(&mut self) {
+        // creates the final command buffer, and maybe a couple extra along the way if using a deferred pipeline
+        /*
+        use vulkano::command_buffer::CommandBuffer;
+        use vulkano::format::Format;
+        use vulkano::image::AttachmentImage;
+
         let clear_values = render_passes::clear_values_for_pass(self.render_pass.clone());
 
-        let framebuffer = self.vk_window.next_framebuffer();
+        let dimensions = self.vk_window.get_dimensions();
 
-        let command_buffer = ll::command_buffer::create_command_buffer(
+        // geo stage
+        let geo_resolve_color =
+            AttachmentImage::sampled(self.device.clone(), dimensions, Format::B8G8R8A8Unorm)
+                .unwrap();
+        let geo_multisampled_color = AttachmentImage::sampled_multisampled(
+            self.device.clone(),
+            dimensions,
+            4,
+            Format::B8G8R8A8Unorm,
+        )
+        .unwrap();
+        let geo_multisampled_depth = AttachmentImage::sampled_multisampled(
+            self.device.clone(),
+            dimensions,
+            4,
+            Format::D16Unorm,
+        )
+        .unwrap();
+        let geo_resolve_depth =
+            AttachmentImage::sampled(self.device.clone(), dimensions, Format::D16Unorm).unwrap();
+
+        let geo_framebuffer = Framebuffer::start(self.render_pass.clone())
+            .add(geo_resolve_color.clone())
+            .unwrap()
+            .add(geo_multisampled_color.clone())
+            .unwrap()
+            .add(geo_multisampled_depth.clone())
+            .unwrap()
+            .add(geo_resolve_depth.clone())
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let geo_cmd_buf = ll::command_buffer::create_command_buffer(
             self.device.clone(),
             self.queue.clone(),
-            framebuffer,
+            Arc::new(geo_framebuffer),
             &clear_values,
             &self.world.get_objects(),
         );
+
+        let geo_finished = geo_cmd_buf.execute(self.queue.clone()).unwrap();
+        geo_finished
+            .then_signal_fence_and_flush()
+            .unwrap()
+            .wait(None)
+            .unwrap();
+
+        // lighting stage
+        let framebuffer = self.vk_window.next_framebuffer();
+
+        let uniform = vulkano::descriptor::descriptor_set::PersistentDescriptorSet::start(
+            self.lighting_pipeline.clone(),
+            0,
+        )
+        .add_sampled_image(geo_resolve_color.clone(), self.lighting_sampler.clone())
+        .unwrap()
+        .build()
+        .unwrap();
+
+        let viewport = Viewport {
+            origin: [0.0, 0.0],
+            dimensions: [dimensions[0] as f32, dimensions[1] as f32],
+            depth_range: 0.0..1.0,
+        };
+        let dynamic_state = DynamicState {
+            line_width: None,
+            viewports: Some(vec![viewport]),
+            scissors: None,
+        };
+
+        let command_buffer = AutoCommandBufferBuilder::primary_one_time_submit(
+            self.device.clone(),
+            self.queue.family(),
+        )
+        .unwrap()
+        .begin_render_pass(
+            framebuffer.clone(),
+            false,
+            vec![[0.0, 0.0, 0.0, 1.0].into()],
+        )
+        .unwrap()
+        .draw(
+            self.lighting_pipeline.clone(),
+            &dynamic_state,
+            vec![self.lighting_vbuf.clone()],
+            Box::new(uniform),
+            (),
+        )
+        .unwrap()
+        .end_render_pass()
+        .unwrap()
+        .build()
+        .unwrap();
+         */
+
+        let world_renderable_objects = self.world.get_objects();
+        let all_renderable_objects = vec![world_renderable_objects, self.lighting_renderable_objects.clone()];
+        let framebuffer = self.vk_window.next_framebuffer();
+
+        let command_buffer = self.system.draw_frame(
+            self.device.clone(),
+            self.queue.clone(),
+            self.vk_window.get_dimensions(),
+            all_renderable_objects,
+            framebuffer,
+        );
+
         self.command_buffer = Some(command_buffer);
     }
 
@@ -193,7 +423,7 @@ impl App {
     }
 }
 
-impl Default for App {
+impl<'a> Default for App<'a> {
     fn default() -> Self {
         Self::new()
     }
