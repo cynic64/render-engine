@@ -180,6 +180,7 @@ impl<'a> App<'a> {
         let square = system::RenderableObject {
             pipeline: lighting_pipeline,
             vbuf: lighting_vbuf,
+            additional_resources: None,
         };
 
         let vk_window = ll::vk_window::VkWindow::new(
@@ -193,7 +194,7 @@ impl<'a> App<'a> {
         let pass1 = system::Pass {
             images_created: vec!["geo_color", "geo_depth"],
             images_needed: vec![],
-            resources_needed: vec!["mvp"],
+            resources_needed: vec![],
             render_pass: render_pass.clone(),
         };
         let pass2 = system::Pass {
@@ -301,9 +302,7 @@ impl<'a> App<'a> {
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
 
-        let mvp_buffer = self.world.get_mvp_buffer();
-        let mut shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = HashMap::new();
-        shared_resources.insert("mvp", mvp_buffer);
+        let shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = HashMap::new();
 
         let frame_fut = self.system.draw_frame(
             self.device.clone(),

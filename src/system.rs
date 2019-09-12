@@ -84,9 +84,6 @@ impl<'a> System<'a> {
         // returns a command buffer that can be submitted to the swapchain
         // TODO: change vk_window so you submit an image rather than a command buffer
 
-        // TODO: try putting everything in one giant command buffer, because
-        // the uniform buffers can be created beforehand
-
         // create dynamic state (will be the same for every draw call)
         let dynamic_state = dynamic_state_for_dimensions(dimensions);
 
@@ -112,7 +109,7 @@ impl<'a> System<'a> {
             framebuffers.push(framebuffer);
         }
 
-        // execute each pass except the last, which is exeucted depending on the swapchain future
+        // create the command buffer
         let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
@@ -126,7 +123,6 @@ impl<'a> System<'a> {
 
             for object in objects.iter() {
                 // TODO: don't make a set for every object
-                // you can actually specify multiple sets in the draw command, try that
                 // create a descriptor set with samplers for each of the needed images
                 let images_needed: Vec<_> = pass
                     .images_needed
@@ -134,11 +130,15 @@ impl<'a> System<'a> {
                     .map(|tag| images.get(tag).expect("missing key").clone())
                     .collect();
 
-                let resources_needed: Vec<_> = pass
+                let mut resources_needed: Vec<_> = pass
                     .resources_needed
                     .iter()
                     .map(|tag| shared_resources.get(tag).expect("missing key").clone())
                     .collect();
+
+                if let Some(additional_resources) = &object.additional_resources {
+                    resources_needed.push(additional_resources.clone());
+                }
 
                 let image_set =
                     pds_for_images(self.sampler.clone(), object.pipeline.clone(), images_needed);
@@ -183,6 +183,7 @@ impl<'a> System<'a> {
 pub struct RenderableObject {
     pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
+    pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>
 }
 
 fn create_image_for_desc(

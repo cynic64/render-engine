@@ -1,13 +1,13 @@
 use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
-use crate::shaders::*;
 use crate::mesh_gen;
+use crate::shaders::*;
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::path::Path;
 
 use crate::system::RenderableObject;
 
@@ -154,6 +154,7 @@ impl World {
         let object = RenderableObject {
             pipeline,
             vbuf,
+            additional_resources: None,
         };
 
         self.objects.insert(id, object);
@@ -170,15 +171,17 @@ impl World {
     pub fn update(&mut self, frame_info: FrameInfo) {
         self.check_for_commands();
         self.camera.handle_input(frame_info.clone());
+        self.update_resources();
         self.mvp.view = self.camera.get_view_matrix();
         self.mvp.proj = self.camera.get_projection_matrix();
     }
 
-    pub fn get_mvp_buffer(&self) -> Arc<dyn BufferAccess + Send + Sync> {
+    pub fn update_resources(&mut self) {
         let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
             self.device.clone(),
             vulkano::buffer::BufferUsage::all(),
         );
+
         let uniform_buffer_subbuffer = {
             let uniform_data = MVP {
                 model: self.mvp.model,
@@ -187,7 +190,10 @@ impl World {
             };
             uniform_buffer.next(uniform_data).unwrap()
         };
-        Arc::new(uniform_buffer_subbuffer)
+
+        self.objects.values_mut().for_each(|obj| {
+            obj.additional_resources = Some(Arc::new(uniform_buffer_subbuffer.clone()))
+        });
     }
 
     fn check_for_commands(&mut self) {
@@ -259,40 +265,36 @@ impl ObjectSpecBuilder {
     }
 
     pub fn build(self, device: Arc<Device>) -> ObjectSpec {
-        let fill_type = self.custom_fill_type.unwrap_or(PrimitiveTopology::TriangleList);
+        let fill_type = self
+            .custom_fill_type
+            .unwrap_or(PrimitiveTopology::TriangleList);
 
         // if you choose to customize shaders, you need to provide both
         let (vs, fs) = self.custom_shaders.unwrap_or_else(|| {
-            let vert_path = Path::new(
-                concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/shaders/deferred/default_geo_vert.glsl"
-                )
-            );
+            let vert_path = Path::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/shaders/deferred/default_geo_vert.glsl"
+            ));
 
-
-            let frag_path = Path::new(
-                concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/shaders/deferred/default_geo_frag.glsl"
-                )
-            );
+            let frag_path = Path::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/shaders/deferred/default_geo_frag.glsl"
+            ));
 
             Shader::load_from_file(device.clone(), &vert_path, &frag_path)
         });
 
-        let material = Material {
-            fill_type,
-            vs,
-            fs,
-        };
+        let material = Material { fill_type, vs, fs };
 
         // if no mesh is provided, load a cube
-        let mesh = self.custom_mesh.unwrap_or_else(|| Box::new(mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0, [1.0, 1.0, 1.0])));
+        let mesh = self.custom_mesh.unwrap_or_else(|| {
+            Box::new(mesh_gen::create_vertices_for_cube(
+                [0.0, 0.0, 0.0],
+                1.0,
+                [1.0, 1.0, 1.0],
+            ))
+        });
 
-        ObjectSpec {
-            mesh,
-            material,
-        }
+        ObjectSpec { mesh, material }
     }
 }
