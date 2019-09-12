@@ -8,6 +8,10 @@ use crate::render_passes;
 use crate::world::*;
 use crate::system;
 
+use std::collections::HashMap;
+
+use vulkano::command_buffer::CommandBuffer;
+
 pub struct App<'a> {
     instance: Arc<Instance>,
     events_handler: EventHandler,
@@ -193,11 +197,13 @@ impl<'a> App<'a> {
         let pass1 = system::Pass {
             images_created: vec!["geo_color", "geo_depth"],
             images_needed: vec![],
+            resources_needed: vec!["mvp"],
             render_pass: render_pass.clone(),
         };
         let pass2 = system::Pass {
             images_created: vec!["lighting_color"],
             images_needed: vec!["geo_color"],
+            resources_needed: vec![],
             render_pass: lighting_render_pass.clone(),
         };
         let system = system::System::new(device.clone(), vec![pass1, pass2]);
@@ -298,22 +304,30 @@ impl<'a> App<'a> {
     fn create_command_buffer(&mut self) {
         let world_renderable_objects = self.world.get_objects();
         let all_renderable_objects = vec![world_renderable_objects, self.lighting_renderable_objects.clone()];
-        let framebuffer = self.vk_window.next_framebuffer();
+        let swapchain_image = self.vk_window.next_image();
+        let swapchain_fut = self.vk_window.get_future();
 
-        let command_buffer = self.system.draw_frame(
+        let mvp_buffer = self.world.get_mvp_buffer();
+        let mut shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = HashMap::new();
+        shared_resources.insert("mvp", mvp_buffer);
+
+        let frame_fut = self.system.draw_frame(
             self.device.clone(),
             self.queue.clone(),
             self.vk_window.get_dimensions(),
             all_renderable_objects,
-            framebuffer,
+            shared_resources,
+            "lighting_color",
+            swapchain_image,
+            swapchain_fut,
         );
 
-        self.command_buffer = Some(command_buffer);
+        self.vk_window.present_image(self.queue.clone(), frame_fut);
     }
 
     fn submit_and_check(&mut self) {
-        self.vk_window
-            .submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
+    //     self.vk_window
+    //         .submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
     }
 }
 

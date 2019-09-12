@@ -175,6 +175,22 @@ impl World {
         self.mvp.proj = self.camera.get_projection_matrix();
     }
 
+    pub fn get_mvp_buffer(&self) -> Arc<dyn BufferAccess + Send + Sync> {
+        let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
+            self.device.clone(),
+            vulkano::buffer::BufferUsage::all(),
+        );
+        let uniform_buffer_subbuffer = {
+            let uniform_data = MVP {
+                model: self.mvp.model,
+                view: self.mvp.view,
+                proj: self.mvp.proj,
+            };
+            uniform_buffer.next(uniform_data).unwrap()
+        };
+        Arc::new(uniform_buffer_subbuffer)
+    }
+
     fn check_for_commands(&mut self) {
         let command_recv = self.command_recv.take().unwrap();
 
