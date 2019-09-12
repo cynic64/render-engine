@@ -1,6 +1,6 @@
 use vulkano::buffer::BufferAccess;
 use vulkano::command_buffer::{
-    AutoCommandBuffer, AutoCommandBufferBuilder, CommandBuffer, DynamicState,
+    AutoCommandBufferBuilder, DynamicState,
 };
 use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::{Device, Queue};
@@ -113,16 +113,14 @@ impl<'a> System<'a> {
         }
 
         // execute each pass except the last, which is exeucted depending on the swapchain future
-        let mut final_cmd_buf: Option<AutoCommandBuffer> = None;
+        let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
             let objects = &objects[idx];
 
             let clear_values = render_passes::clear_values_for_pass(pass.render_pass.clone());
 
-            let mut cbb =
-                AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())
-                    .unwrap()
+            cmd_buf_builder = cmd_buf_builder
                     .begin_render_pass(framebuffer, false, clear_values)
                     .unwrap();
 
@@ -154,7 +152,7 @@ impl<'a> System<'a> {
                     }
                 };
 
-                cbb = cbb
+                cmd_buf_builder = cmd_buf_builder
                     .draw(
                         object.pipeline.clone(),
                         &dynamic_state,
@@ -163,55 +161,18 @@ impl<'a> System<'a> {
                         (),
                     )
                     .unwrap();
-                // TODO: try doing unwrap_or with () and casting into the type .draw() takes
-                /*
-                if let Some(real_image_set) = image_set {
-                    // if there is a pds, use it
-                    cbb = cbb
-                        .draw(
-                            object.pipeline.clone(),
-                            &dynamic_state,
-                            vec![object.vbuf.clone()],
-                            real_image_set,
-                            (),
-                        )
-                        .unwrap();
-                } else {
-                    // otherwise just use ()
-                    cbb = cbb
-                        .draw(
-                            object.pipeline.clone(),
-                            &dynamic_state,
-                            vec![object.vbuf.clone()],
-                            (),
-                            (),
-                        )
-                        .unwrap();
-                }
-                */
             }
 
-            let cmd_buf = cbb.end_render_pass().unwrap().build().unwrap();
-
-            // execute the command buffer unless we are in the last pass
-            if idx == self.passes.len() - 1 {
-                final_cmd_buf = Some(cmd_buf);
-            } else {
-                cmd_buf
-                    .execute(queue.clone())
-                    .unwrap()
-                    .then_signal_fence_and_flush()
-                    .unwrap()
-                    .wait(None)
-                    .unwrap();
-            }
+            cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
         }
+
+        let final_cmd_buf = cmd_buf_builder.build().unwrap();
 
         Box::new(
             future
                 .then_execute(
                     queue.clone(),
-                    final_cmd_buf.expect("No final command buffer"),
+                    final_cmd_buf,
                 )
                 .unwrap(),
         )
