@@ -10,12 +10,8 @@ use crate::system;
 
 use std::collections::HashMap;
 
-use vulkano::command_buffer::CommandBuffer;
-
 pub struct App<'a> {
-    instance: Arc<Instance>,
     events_handler: EventHandler,
-    physical_device_index: usize,
     device: Arc<Device>,
     queue: Arc<Queue>,
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
@@ -209,9 +205,7 @@ impl<'a> App<'a> {
         let system = system::System::new(device.clone(), vec![pass1, pass2]);
 
         Self {
-            instance: instance.clone(),
             events_handler,
-            physical_device_index: physical.index(),
             device,
             queue,
             render_pass,

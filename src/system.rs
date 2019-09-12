@@ -2,9 +2,7 @@ use vulkano::buffer::BufferAccess;
 use vulkano::command_buffer::{
     AutoCommandBuffer, AutoCommandBufferBuilder, CommandBuffer, DynamicState,
 };
-use vulkano::descriptor::descriptor_set::{
-    DescriptorSet, DescriptorSetsCollection, PersistentDescriptorSet,
-};
+use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract, RenderPassDesc,

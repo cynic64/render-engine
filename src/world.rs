@@ -13,7 +13,6 @@ use crate::system::RenderableObject;
 
 use vulkano::buffer::BufferAccess;
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
-use vulkano::pipeline::GraphicsPipelineAbstract;
 
 extern crate nalgebra_glm as glm;
 
