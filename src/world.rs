@@ -17,7 +17,7 @@ pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 extern crate nalgebra_glm as glm;
 
 pub struct World {
-    objects: HashMap<String, RenderableObject>,
+    objects: HashMap<String, (ObjectSpec, RenderableObject)>,
     // we need to use an option to get around the borrow checker later
     // soooooorry
     command_recv: Option<Receiver<Command>>,
@@ -43,9 +43,14 @@ pub enum Command {
 // the ObjectSpec is an abstract definition of the object, the DrawableObject
 // contains all the concrete things needed to actually draw the object like
 // the pipeline and vertex shaders
+
+// TODO: derive clone and change the builder for this so you can re-use
+// halfway-complete builders
+// it's useful, i swear!
 pub struct ObjectSpec {
     mesh: Box<dyn Mesh>,
     material: Material,
+    model_matrix: CameraMatrix,
 }
 
 pub trait Mesh {
@@ -157,11 +162,11 @@ impl World {
             additional_resources: None,
         };
 
-        self.objects.insert(id, object);
+        self.objects.insert(id, (spec, object));
     }
 
     pub fn get_objects(&self) -> Vec<RenderableObject> {
-        self.objects.values().map(|x| x.clone()).collect()
+        self.objects.values().map(|(_spec, obj)| obj.clone()).collect()
     }
 
     pub fn delete_object(&mut self, id: String) {
@@ -177,21 +182,27 @@ impl World {
     }
 
     pub fn update_resources(&mut self) {
-        let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
-            self.device.clone(),
-            vulkano::buffer::BufferUsage::all(),
-        );
+        let device = self.device.clone();
+        let view = self.mvp.view;
+        let proj = self.mvp.proj;
 
-        let uniform_buffer_subbuffer = {
-            let uniform_data = MVP {
-                model: self.mvp.model,
-                view: self.mvp.view,
-                proj: self.mvp.proj,
+        self.objects.values_mut().for_each(|(spec, obj)| {
+            let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
+                device.clone(),
+                vulkano::buffer::BufferUsage::all(),
+            );
+
+            // TODO: separate model matrix from the rest bc it is the only one
+            // that changes between objects
+            let uniform_buffer_subbuffer = {
+                let uniform_data = MVP {
+                    model: spec.model_matrix,
+                    view: view,
+                    proj: proj,
+                };
+                uniform_buffer.next(uniform_data).unwrap()
             };
-            uniform_buffer.next(uniform_data).unwrap()
-        };
 
-        self.objects.values_mut().for_each(|obj| {
             obj.additional_resources = Some(Arc::new(uniform_buffer_subbuffer.clone()))
         });
     }
@@ -239,6 +250,7 @@ pub struct ObjectSpecBuilder {
     custom_mesh: Option<Box<dyn Mesh>>,
     custom_fill_type: Option<PrimitiveTopology>,
     custom_shaders: Option<(Shader, Shader)>,
+    custom_model_matrix: Option<CameraMatrix>
 }
 
 impl ObjectSpecBuilder {
@@ -247,6 +259,7 @@ impl ObjectSpecBuilder {
             custom_mesh: None,
             custom_fill_type: None,
             custom_shaders: None,
+            custom_model_matrix: None,
         }
     }
 
@@ -260,6 +273,13 @@ impl ObjectSpecBuilder {
     pub fn shaders(self, vs: Shader, fs: Shader) -> Self {
         Self {
             custom_shaders: Some((vs, fs)),
+            ..self
+        }
+    }
+
+    pub fn model_matrix(self, model_matrix: CameraMatrix) -> Self {
+        Self {
+            custom_model_matrix: Some(model_matrix),
             ..self
         }
     }
@@ -295,6 +315,9 @@ impl ObjectSpecBuilder {
             ))
         });
 
-        ObjectSpec { mesh, material }
+        // if no model matrix is provided, use the identity matrix
+        let model_matrix = self.custom_model_matrix.unwrap_or(glm::Mat4::identity().into());
+
+        ObjectSpec { mesh, material, model_matrix }
     }
 }

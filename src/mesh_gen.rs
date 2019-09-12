@@ -73,15 +73,15 @@ pub fn load_obj(path: &Path) -> Result<Vec<Vertex>, Error> {
             normals.push([x, y * 1.0, z]);
         } else if line.starts_with("f ") {
             let pieces: Vec<_> = line.split_whitespace().collect();
-            let piece1 = pieces[1].split("//").collect::<Vec<_>>();
-            let piece2 = pieces[2].split("//").collect::<Vec<_>>();
-            let piece3 = pieces[3].split("//").collect::<Vec<_>>();
+            let piece1 = pieces[1].split("/").collect::<Vec<_>>();
+            let piece2 = pieces[2].split("/").collect::<Vec<_>>();
+            let piece3 = pieces[3].split("/").collect::<Vec<_>>();
             let v1: usize = piece1[0].parse().unwrap();
             let v2: usize = piece2[0].parse().unwrap();
             let v3: usize = piece3[0].parse().unwrap();
-            let n1: usize = piece1[1].parse().unwrap();
-            let n2: usize = piece2[1].parse().unwrap();
-            let n3: usize = piece3[1].parse().unwrap();
+            let n1: usize = piece1[2].parse().unwrap();
+            let n2: usize = piece2[2].parse().unwrap();
+            let n3: usize = piece3[2].parse().unwrap();
 
             faces.push((v1, v2, v3, n1, n2, n3));
         }
