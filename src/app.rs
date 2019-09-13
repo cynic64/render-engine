@@ -20,9 +20,6 @@ pub struct App<'a> {
     multisampling_enabled: bool,
     world: World,
     vk_window: ll::vk_window::VkWindow,
-
-    lighting_renderable_objects: Vec<system::RenderableObject>,
-
     system: system::System<'a>,
 }
 
@@ -83,30 +80,6 @@ impl<'a> App<'a> {
         let world = World::new(render_pass.clone(), device.clone(), Box::new(camera));
 
         // set up lighting stage
-        let lighting_vbuf = {
-            vulkano::buffer::CpuAccessibleBuffer::from_iter(
-                device.clone(),
-                BufferUsage::all(),
-                [
-                    SimpleVertex {
-                        position: [-1.0, -1.0],
-                    },
-                    SimpleVertex {
-                        position: [-1.0, 1.0],
-                    },
-                    SimpleVertex {
-                        position: [1.0, -1.0],
-                    },
-                    SimpleVertex {
-                        position: [1.0, 1.0],
-                    },
-                ]
-                .iter()
-                .cloned(),
-            )
-            .unwrap()
-        };
-
         let lighting_render_pass = Arc::new(
             vulkano::single_pass_renderpass!(
                 device.clone(),
@@ -177,12 +150,6 @@ impl<'a> App<'a> {
                 .unwrap(),
         );
 
-        let square = system::RenderableObject {
-            pipeline: lighting_pipeline,
-            vbuf: lighting_vbuf,
-            additional_resources: None,
-        };
-
         let vk_window = ll::vk_window::VkWindow::new(
             device.clone(),
             queue.clone(),
@@ -191,17 +158,18 @@ impl<'a> App<'a> {
             swapchain_caps.clone(),
         );
 
-        let pass1 = system::Pass {
+        let pass1 = system::Pass::Complex {
             images_created: vec!["geo_color", "geo_depth"],
             images_needed: vec![],
             resources_needed: vec![],
             render_pass: render_pass.clone(),
         };
-        let pass2 = system::Pass {
+        let pass2 = system::Pass::Simple {
             images_created: vec!["lighting_color"],
             images_needed: vec!["geo_color"],
             resources_needed: vec![],
             render_pass: lighting_render_pass.clone(),
+            pipeline: lighting_pipeline,
         };
         let system = system::System::new(device.clone(), vec![pass1, pass2]);
 
@@ -215,8 +183,6 @@ impl<'a> App<'a> {
             multisampling_enabled,
             world,
             vk_window,
-
-            lighting_renderable_objects: vec![square],
             system,
         }
     }
@@ -298,7 +264,7 @@ impl<'a> App<'a> {
 
     fn create_command_buffer(&mut self) {
         let world_renderable_objects = self.world.get_objects();
-        let all_renderable_objects = vec![world_renderable_objects, self.lighting_renderable_objects.clone()];
+        let all_renderable_objects = vec![world_renderable_objects, vec![]];
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
 

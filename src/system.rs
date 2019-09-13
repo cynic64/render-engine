@@ -1,11 +1,9 @@
-use vulkano::buffer::BufferAccess;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, DynamicState,
-};
+use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
-    AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract, RenderPassDesc,
+    AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
 };
 use vulkano::image::{AttachmentImage, ImageViewAccess};
 use vulkano::pipeline::viewport::Viewport;
@@ -23,6 +21,8 @@ use crate::render_passes;
 pub struct System<'a> {
     pub passes: Vec<Pass<'a>>,
     sampler: Arc<Sampler>,
+    // stores the vbuf of the screen-filling square used for non-geometry passes
+    simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
 }
 
 // A pass is a single operation carried out by a vertex shadeer and fragment
@@ -38,12 +38,29 @@ pub struct System<'a> {
 //   and add the needed images to a uniform buffer
 //   'mvp' is a special kind of needed image, it'll add the mvp instead
 //   this is temporary, it's a shitty solution
-pub struct Pass<'a> {
-    pub images_created: Vec<&'a str>,
-    pub images_needed: Vec<&'a str>,
-    pub resources_needed: Vec<&'a str>,
-    pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+
+pub enum Pass<'a> {
+    Complex {
+        images_created: Vec<&'a str>,
+        images_needed: Vec<&'a str>,
+        resources_needed: Vec<&'a str>,
+        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    },
+    Simple {
+        images_created: Vec<&'a str>,
+        images_needed: Vec<&'a str>,
+        resources_needed: Vec<&'a str>,
+        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+        // because no objects are passed to a SimplePass, the pipeline is set for
+        // the whole pass instead of individual objects
+        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    },
 }
+
+// TODO: maybe use a trait for this instead
+// Simple means the system will create a square that fills the screen and run
+// the shaders on that. Complex is what you'd use for rendering the actual
+// geometry, providing your own objects.
 
 impl<'a> System<'a> {
     pub fn new(device: Arc<Device>, passes: Vec<Pass<'a>>) -> Self {
@@ -62,7 +79,35 @@ impl<'a> System<'a> {
         )
         .unwrap();
 
-        Self { passes, sampler }
+        let simple_vbuf = {
+            CpuAccessibleBuffer::from_iter(
+                device.clone(),
+                BufferUsage::all(),
+                [
+                    SimpleVertex {
+                        position: [-1.0, -1.0],
+                    },
+                    SimpleVertex {
+                        position: [-1.0, 1.0],
+                    },
+                    SimpleVertex {
+                        position: [1.0, -1.0],
+                    },
+                    SimpleVertex {
+                        position: [1.0, 1.0],
+                    },
+                ]
+                .iter()
+                .cloned(),
+            )
+            .unwrap()
+        };
+
+        Self {
+            passes,
+            sampler,
+            simple_vbuf,
+        }
     }
 
     pub fn draw_frame<F>(
@@ -81,7 +126,7 @@ impl<'a> System<'a> {
     where
         F: GpuFuture + 'static,
     {
-        // returns a command buffer that can be submitted to the swapchain
+        // 
         // TODO: change vk_window so you submit an image rather than a command buffer
 
         // create dynamic state (will be the same for every draw call)
@@ -92,12 +137,12 @@ impl<'a> System<'a> {
         let mut framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>> = vec![];
         for pass in self.passes.iter() {
             let mut images_for_pass = vec![];
-            for (image_idx, image_tag) in pass.images_created.iter().enumerate() {
+            for (image_idx, image_tag) in pass.get_images_created().iter().enumerate() {
                 // TODO: add a range check
                 let image = if *image_tag == output_tag {
                     dest_image.clone()
                 } else {
-                    let desc = pass.render_pass.attachment_desc(image_idx).expect("pls no");
+                    let desc = pass.get_render_pass().attachment_desc(image_idx).expect("pls no");
                     create_image_for_desc(device.clone(), dimensions, desc)
                 };
 
@@ -105,33 +150,45 @@ impl<'a> System<'a> {
                 images_for_pass.push(image.clone());
             }
 
-            let framebuffer = fb_from_images(pass.render_pass.clone(), images_for_pass);
+            let framebuffer = fb_from_images(pass.get_render_pass().clone(), images_for_pass);
             framebuffers.push(framebuffer);
         }
 
         // create the command buffer
-        let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family()).unwrap();
+        let mut cmd_buf_builder =
+            AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())
+                .unwrap();
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
-            let objects = &objects[idx];
 
-            let clear_values = render_passes::clear_values_for_pass(pass.render_pass.clone());
+            let clear_values = render_passes::clear_values_for_pass(pass.get_render_pass().clone());
 
             cmd_buf_builder = cmd_buf_builder
-                    .begin_render_pass(framebuffer, false, clear_values)
-                    .unwrap();
+                .begin_render_pass(framebuffer, false, clear_values)
+                .unwrap();
 
-            for object in objects.iter() {
+            // if it's a complex pass take the objects we were given, if it's a
+            // simple one just use a screen-villing vbuf
+            let pass_objects = match pass {
+                Pass::Complex { .. } => objects[idx].clone(),
+                Pass::Simple { pipeline, ..} => vec![RenderableObject {
+                    pipeline: pipeline.clone(),
+                    vbuf: self.simple_vbuf.clone(),
+                    additional_resources: None,
+                }],
+            };
+
+            for object in pass_objects.iter() {
                 // TODO: don't make a set for every object
                 // create a descriptor set with samplers for each of the needed images
                 let images_needed: Vec<_> = pass
-                    .images_needed
+                    .get_images_needed()
                     .iter()
                     .map(|tag| images.get(tag).expect("missing key").clone())
                     .collect();
 
                 let mut resources_needed: Vec<_> = pass
-                    .resources_needed
+                    .get_resources_needed()
                     .iter()
                     .map(|tag| shared_resources.get(tag).expect("missing key").clone())
                     .collect();
@@ -168,14 +225,7 @@ impl<'a> System<'a> {
 
         let final_cmd_buf = cmd_buf_builder.build().unwrap();
 
-        Box::new(
-            future
-                .then_execute(
-                    queue.clone(),
-                    final_cmd_buf,
-                )
-                .unwrap(),
-        )
+        Box::new(future.then_execute(queue.clone(), final_cmd_buf).unwrap())
     }
 }
 
@@ -183,7 +233,7 @@ impl<'a> System<'a> {
 pub struct RenderableObject {
     pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
-    pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>
+    pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 fn create_image_for_desc(
@@ -359,3 +409,43 @@ fn fb_from_images(
         _ => panic!("Creating a framebuffer from more than 4 images is unsupported!"),
     }
 }
+
+impl<'a> Pass<'a> {
+    fn get_images_created(&self) -> Vec<&str> {
+        match self {
+            Pass::Complex { images_created, .. } => images_created.clone(),
+            Pass::Simple { images_created, .. } => images_created.clone(),
+        }
+    }
+
+    fn get_images_needed(&self) -> Vec<&str> {
+        match self {
+            Pass::Complex { images_needed, .. } => images_needed.clone(),
+            Pass::Simple { images_needed, .. } => images_needed.clone(),
+        }
+    }
+
+    fn get_resources_needed(&self) -> Vec<&str> {
+        match self {
+            Pass::Complex {
+                resources_needed, ..
+            } => resources_needed.clone(),
+            Pass::Simple {
+                resources_needed, ..
+            } => resources_needed.clone(),
+        }
+    }
+
+    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
+        match self {
+            Pass::Complex { render_pass, .. } => render_pass.clone(),
+            Pass::Simple { render_pass, .. } => render_pass.clone(),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+struct SimpleVertex {
+    position: [f32; 2],
+}
+vulkano::impl_vertex!(SimpleVertex, position);

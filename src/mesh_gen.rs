@@ -87,6 +87,8 @@ pub fn load_obj(path: &Path) -> Result<Vec<Vertex>, Error> {
         }
     }
 
+    println!("loaded obj: {} verts, {} normals, {} faces", vertices.len(), normals.len(), faces.len());
+
     Ok(faces
         .iter()
         .flat_map(|(v1, v2, v3, n1, n2, n3)| {

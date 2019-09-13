@@ -16,6 +16,7 @@ pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 
 extern crate nalgebra_glm as glm;
 
+// the world stores objects and can produce a list of renderable objects
 pub struct World {
     objects: HashMap<String, (ObjectSpec, RenderableObject)>,
     // we need to use an option to get around the borrow checker later
@@ -181,7 +182,7 @@ impl World {
         self.mvp.proj = self.camera.get_projection_matrix();
     }
 
-    pub fn update_resources(&mut self) {
+    fn update_resources(&mut self) {
         let device = self.device.clone();
         let view = self.mvp.view;
         let proj = self.mvp.proj;
