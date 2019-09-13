@@ -71,8 +71,7 @@ where
 // maybe a MaterialSpec would be useful too, cause it wouldn't require a vulkan instance... idk
 struct Material {
     pub fill_type: PrimitiveTopology,
-    pub vs: Shader,
-    pub fs: Shader,
+    pub shaders: ShaderSystem,
 }
 
 impl World {
@@ -120,37 +119,15 @@ impl World {
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
         let vbuf = spec.mesh.create_vbuf(self.device.clone());
 
-        // TODO: put this in Shader?
-        let vs_entry = spec.material.vs.entry.clone();
-        let fs_entry = spec.material.fs.entry.clone();
-
-        let vert_main = unsafe {
-            spec.material.vs.module.graphics_entry_point(
-                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
-                vs_entry.vert_input,
-                vs_entry.vert_output,
-                vs_entry.vert_layout,
-                vulkano::pipeline::shader::GraphicsShaderType::Vertex,
-            )
-        };
-
-        let frag_main = unsafe {
-            spec.material.fs.module.graphics_entry_point(
-                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
-                fs_entry.frag_input,
-                fs_entry.frag_output,
-                fs_entry.frag_layout,
-                vulkano::pipeline::shader::GraphicsShaderType::Fragment,
-            )
-        };
+        let (vs_main, fs_main) = spec.material.shaders.get_entry_points();
 
         let pipeline = Arc::new(
             GraphicsPipeline::start()
                 .vertex_input_single_buffer::<Vertex>()
-                .vertex_shader(vert_main, ())
+                .vertex_shader(vs_main, ())
                 .primitive_topology(spec.material.fill_type)
                 .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(frag_main, ())
+                .fragment_shader(fs_main, ())
                 .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
                 .depth_stencil_simple_depth()
                 .build(self.device.clone())
@@ -250,7 +227,7 @@ where
 pub struct ObjectSpecBuilder {
     custom_mesh: Option<Box<dyn Mesh>>,
     custom_fill_type: Option<PrimitiveTopology>,
-    custom_shaders: Option<(Shader, Shader)>,
+    custom_shaders: Option<ShaderSystem>,
     custom_model_matrix: Option<CameraMatrix>
 }
 
@@ -271,9 +248,9 @@ impl ObjectSpecBuilder {
         }
     }
 
-    pub fn shaders(self, vs: Shader, fs: Shader) -> Self {
+    pub fn shaders(self, shaders: ShaderSystem) -> Self {
         Self {
-            custom_shaders: Some((vs, fs)),
+            custom_shaders: Some(shaders),
             ..self
         }
     }
@@ -291,21 +268,21 @@ impl ObjectSpecBuilder {
             .unwrap_or(PrimitiveTopology::TriangleList);
 
         // if you choose to customize shaders, you need to provide both
-        let (vs, fs) = self.custom_shaders.unwrap_or_else(|| {
+        let shaders = self.custom_shaders.unwrap_or_else(|| {
             let vert_path = Path::new(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/shaders/deferred/default_geo_vert.glsl"
+                "/shaders/forward/default_vert.glsl"
             ));
 
             let frag_path = Path::new(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/shaders/deferred/default_geo_frag.glsl"
+                "/shaders/forward/default_frag.glsl"
             ));
 
-            Shader::load_from_file(device.clone(), &vert_path, &frag_path)
+            ShaderSystem::load_from_file(device.clone(), &vert_path, &frag_path)
         });
 
-        let material = Material { fill_type, vs, fs };
+        let material = Material { fill_type, shaders };
 
         // if no mesh is provided, load a cube
         let mesh = self.custom_mesh.unwrap_or_else(|| {

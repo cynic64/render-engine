@@ -3,7 +3,8 @@ extern crate vulkano;
 
 use vulkano::pipeline::shader::ShaderModule;
 use vulkano::device::Device;
-use shade_runner::{Entry, load, parse};
+use shade_runner::{Entry, load, parse, VertInput, VertOutput, VertLayout, FragInput, FragOutput, FragLayout};
+use vulkano::pipeline::shader::{GraphicsEntryPoint};
 
 use std::path::Path;
 use std::sync::Arc;
@@ -14,8 +15,14 @@ pub struct Shader {
     pub entry: Entry,
 }
 
-impl Shader {
-    pub fn load_from_file(device: Arc<Device>, vs_path: &Path, fs_path: &Path) -> (Self, Self) {
+#[derive(Clone)]
+pub struct ShaderSystem {
+    pub vs: Shader,
+    pub fs: Shader,
+}
+
+impl ShaderSystem {
+    pub fn load_from_file(device: Arc<Device>, vs_path: &Path, fs_path: &Path) -> Self {
         let shaders = load(vs_path, fs_path).expect("Couldn't load shaders");
         let entry = parse(&shaders).expect("Couldn't parse shaders");
 
@@ -39,6 +46,39 @@ impl Shader {
             entry: entry.clone(),
         };
 
-        (vs, fs)
+        Self {
+            vs,
+            fs,
+        }
+    }
+
+    pub fn get_entry_points(&self) -> (VertEntry, FragEntry) {
+        let vs_entry = self.vs.entry.clone();
+        let fs_entry = self.fs.entry.clone();
+
+        let vert_main = unsafe {
+            self.vs.module.graphics_entry_point(
+                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
+                vs_entry.vert_input,
+                vs_entry.vert_output,
+                vs_entry.vert_layout,
+                vulkano::pipeline::shader::GraphicsShaderType::Vertex,
+            )
+        };
+
+        let frag_main = unsafe {
+            self.fs.module.graphics_entry_point(
+                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
+                fs_entry.frag_input,
+                fs_entry.frag_output,
+                fs_entry.frag_layout,
+                vulkano::pipeline::shader::GraphicsShaderType::Fragment,
+            )
+        };
+
+        (vert_main, frag_main)
     }
 }
+
+type VertEntry<'a> = GraphicsEntryPoint<'a, (), VertInput, VertOutput, VertLayout>;
+type FragEntry<'a> = GraphicsEntryPoint<'a, (), FragInput, FragOutput, FragLayout>;

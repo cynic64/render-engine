@@ -23,9 +23,12 @@ pub struct System<'a> {
     sampler: Arc<Sampler>,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
+    device: Arc<Device>,
+    queue: Arc<Queue>,
+    output_tag: &'a str,
 }
 
-// A pass is a single operation carried out by a vertex shadeer and fragment
+// A pass is a single operation carried out by a vertex shader and fragment
 // shader combination.
 // For example: a geometry pass to draw some objects in 3D space
 //   it would only have the 'MVP' need, because it wouldn't need any other images
@@ -39,6 +42,10 @@ pub struct System<'a> {
 //   'mvp' is a special kind of needed image, it'll add the mvp instead
 //   this is temporary, it's a shitty solution
 
+// TODO: maybe use a trait for this instead
+// Simple means the system will create a square that fills the screen and run
+// the shaders on that. Complex is what you'd use for rendering the actual
+// geometry, providing your own objects.
 pub enum Pass<'a> {
     Complex {
         images_created: Vec<&'a str>,
@@ -57,13 +64,10 @@ pub enum Pass<'a> {
     },
 }
 
-// TODO: maybe use a trait for this instead
-// Simple means the system will create a square that fills the screen and run
-// the shaders on that. Complex is what you'd use for rendering the actual
-// geometry, providing your own objects.
-
 impl<'a> System<'a> {
-    pub fn new(device: Arc<Device>, passes: Vec<Pass<'a>>) -> Self {
+    pub fn new(queue: Arc<Queue>, passes: Vec<Pass<'a>>, output_tag: &'a str) -> Self {
+        let device = queue.device().clone();
+
         let sampler = Sampler::new(
             device.clone(),
             Filter::Linear,
@@ -107,26 +111,25 @@ impl<'a> System<'a> {
             passes,
             sampler,
             simple_vbuf,
+            device,
+            queue,
+            output_tag,
         }
     }
 
     pub fn draw_frame<F>(
         &mut self,
-        device: Arc<Device>,
-        queue: Arc<Queue>,
         dimensions: [u32; 2],
         // TODO: switch to a hashmap for this, with keys being the pass and a
         // list of objects for each
         objects: Vec<Vec<RenderableObject>>,
         shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>>,
-        output_tag: &str,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
     ) -> Box<dyn GpuFuture>
     where
         F: GpuFuture + 'static,
     {
-        // 
         // TODO: change vk_window so you submit an image rather than a command buffer
 
         // create dynamic state (will be the same for every draw call)
@@ -139,11 +142,11 @@ impl<'a> System<'a> {
             let mut images_for_pass = vec![];
             for (image_idx, image_tag) in pass.get_images_created().iter().enumerate() {
                 // TODO: add a range check
-                let image = if *image_tag == output_tag {
+                let image = if *image_tag == self.output_tag {
                     dest_image.clone()
                 } else {
                     let desc = pass.get_render_pass().attachment_desc(image_idx).expect("pls no");
-                    create_image_for_desc(device.clone(), dimensions, desc)
+                    create_image_for_desc(self.device.clone(), dimensions, desc)
                 };
 
                 images.insert(image_tag, image.clone());
@@ -156,7 +159,7 @@ impl<'a> System<'a> {
 
         // create the command buffer
         let mut cmd_buf_builder =
-            AutoCommandBufferBuilder::primary_one_time_submit(device.clone(), queue.family())
+            AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), self.queue.family())
                 .unwrap();
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
@@ -225,7 +228,11 @@ impl<'a> System<'a> {
 
         let final_cmd_buf = cmd_buf_builder.build().unwrap();
 
-        Box::new(future.then_execute(queue.clone(), final_cmd_buf).unwrap())
+        Box::new(future.then_execute(self.queue.clone(), final_cmd_buf).unwrap())
+    }
+
+    pub fn get_passes(&self) -> &[Pass] {
+        &self.passes
     }
 }
 
@@ -411,21 +418,21 @@ fn fb_from_images(
 }
 
 impl<'a> Pass<'a> {
-    fn get_images_created(&self) -> Vec<&str> {
+    pub fn get_images_created(&self) -> Vec<&str> {
         match self {
             Pass::Complex { images_created, .. } => images_created.clone(),
             Pass::Simple { images_created, .. } => images_created.clone(),
         }
     }
 
-    fn get_images_needed(&self) -> Vec<&str> {
+    pub fn get_images_needed(&self) -> Vec<&str> {
         match self {
             Pass::Complex { images_needed, .. } => images_needed.clone(),
             Pass::Simple { images_needed, .. } => images_needed.clone(),
         }
     }
 
-    fn get_resources_needed(&self) -> Vec<&str> {
+    pub fn get_resources_needed(&self) -> Vec<&str> {
         match self {
             Pass::Complex {
                 resources_needed, ..
@@ -436,7 +443,7 @@ impl<'a> Pass<'a> {
         }
     }
 
-    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
+    pub fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
         match self {
             Pass::Complex { render_pass, .. } => render_pass.clone(),
             Pass::Simple { render_pass, .. } => render_pass.clone(),

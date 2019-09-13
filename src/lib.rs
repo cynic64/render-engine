@@ -8,6 +8,8 @@ pub use app::App;
 pub mod camera;
 pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
 
+pub mod template_systems;
+
 pub mod input;
 
 pub mod shaders;

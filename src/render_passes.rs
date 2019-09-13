@@ -91,17 +91,11 @@ pub fn basic(device: Arc<Device>) -> RenderPass {
                     store: Store,
                     format: DEFAULT_COLOR_FORMAT,
                     samples: 1,
-                },
-                depth: {
-                    load: Clear,
-                    store: Store,
-                    format: DEFAULT_DEPTH_FORMAT,
-                    samples: 1,
                 }
             },
             pass: {
                 color: [color],
-                depth_stencil: {depth}
+                depth_stencil: {}
             }
         )
         .unwrap(),

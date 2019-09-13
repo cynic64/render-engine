@@ -7,6 +7,7 @@ use crate::internal_tools::*;
 use crate::render_passes;
 use crate::world::*;
 use crate::system;
+use crate::template_systems;
 
 use std::collections::HashMap;
 
@@ -71,107 +72,22 @@ impl<'a> App<'a> {
 
         let swapchain_caps = surface.capabilities(physical).unwrap();
         // on my machine this is B8G8R8Unorm
-        // default to using the standard render_pass. The only other option (for now)
-        // is the multisampled one.
-        let render_pass = render_passes::basic(device.clone());
+
+        // create the system
+        let system = template_systems::forward_msaa_depth(queue.clone());
+        let render_pass = system.get_passes()[0].get_render_pass().clone();
 
         let camera = OrbitCamera::default();
 
         let world = World::new(render_pass.clone(), device.clone(), Box::new(camera));
 
-        // set up lighting stage
-        let lighting_render_pass = Arc::new(
-            vulkano::single_pass_renderpass!(
-                device.clone(),
-                attachments: {
-                    color: {
-                        load: Clear,
-                        store: Store,
-                        format: vulkano::format::Format::B8G8R8A8Unorm,
-                        samples: 1,
-                    }
-                },
-                pass: {
-                    color: [color],
-                    depth_stencil: {}
-                }
-            )
-            .unwrap(),
-        );
-
-        use crate::shaders::Shader;
-        use std::path::Path;
-
-        let vert_path = Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/shaders/deferred/default_lighting_vert.glsl"
-        ));
-
-        let frag_path = Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/shaders/deferred/default_lighting_frag.glsl"
-        ));
-
-        let (vs, fs) = Shader::load_from_file(device.clone(), &vert_path, &frag_path);
-
-        let vs_entry = vs.entry.clone();
-        let fs_entry = fs.entry.clone();
-
-        // add helpers for this in Shaders
-        let vert_main = unsafe {
-            vs.module.graphics_entry_point(
-                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
-                vs_entry.vert_input,
-                vs_entry.vert_output,
-                vs_entry.vert_layout,
-                vulkano::pipeline::shader::GraphicsShaderType::Vertex,
-            )
-        };
-
-        let frag_main = unsafe {
-            fs.module.graphics_entry_point(
-                std::ffi::CStr::from_bytes_with_nul_unchecked(b"main\0"),
-                fs_entry.frag_input,
-                fs_entry.frag_output,
-                fs_entry.frag_layout,
-                vulkano::pipeline::shader::GraphicsShaderType::Fragment,
-            )
-        };
-
-        let lighting_pipeline = Arc::new(
-            vulkano::pipeline::GraphicsPipeline::start()
-                .vertex_input_single_buffer::<SimpleVertex>()
-                .vertex_shader(vert_main, ())
-                .triangle_strip()
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(frag_main, ())
-                .render_pass(Subpass::from(lighting_render_pass.clone(), 0).unwrap())
-                .build(device.clone())
-                .unwrap(),
-        );
-
         let vk_window = ll::vk_window::VkWindow::new(
             device.clone(),
             queue.clone(),
             surface.clone(),
-            lighting_render_pass.clone(),
+            render_pass.clone(),
             swapchain_caps.clone(),
         );
-
-        let pass1 = system::Pass::Complex {
-            images_created: vec!["geo_color", "geo_depth"],
-            images_needed: vec![],
-            resources_needed: vec![],
-            render_pass: render_pass.clone(),
-        };
-        let pass2 = system::Pass::Simple {
-            images_created: vec!["lighting_color"],
-            images_needed: vec!["geo_color"],
-            resources_needed: vec![],
-            render_pass: lighting_render_pass.clone(),
-            pipeline: lighting_pipeline,
-        };
-        let system = system::System::new(device.clone(), vec![pass1, pass2]);
 
         Self {
             events_handler,
@@ -264,19 +180,16 @@ impl<'a> App<'a> {
 
     fn create_command_buffer(&mut self) {
         let world_renderable_objects = self.world.get_objects();
-        let all_renderable_objects = vec![world_renderable_objects, vec![]];
+        let all_renderable_objects = vec![world_renderable_objects];
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
 
         let shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = HashMap::new();
 
         let frame_fut = self.system.draw_frame(
-            self.device.clone(),
-            self.queue.clone(),
             self.vk_window.get_dimensions(),
             all_renderable_objects,
             shared_resources,
-            "lighting_color",
             swapchain_image,
             swapchain_fut,
         );
