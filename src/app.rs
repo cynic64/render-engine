@@ -5,9 +5,9 @@ use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
 use crate::render_passes;
-use crate::world::*;
-use crate::system;
+use crate::system::System;
 use crate::template_systems;
+use crate::world::*;
 
 use std::collections::HashMap;
 
@@ -15,13 +15,11 @@ pub struct App<'a> {
     events_handler: EventHandler,
     device: Arc<Device>,
     queue: Arc<Queue>,
-    render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     pub done: bool,
     command_buffer: Option<AutoCommandBuffer>,
-    multisampling_enabled: bool,
     world: World,
     vk_window: ll::vk_window::VkWindow,
-    system: system::System<'a>,
+    system: System<'a>,
 }
 
 #[derive(Default, Copy, Clone)]
@@ -63,9 +61,6 @@ impl<'a> App<'a> {
         // iterator and throw it away.
         let queue = queues.next().unwrap();
 
-        // the user can later enable multisampling with app.enable_multisampling()
-        let multisampling_enabled = false;
-
         // At this point, OpenGL initialization would be finished. However in Vulkan it is not. OpenGL
         // implicitly does a lot of computation whenever you draw. In Vulkan, you have to do all this
         // manually.
@@ -74,7 +69,7 @@ impl<'a> App<'a> {
         // on my machine this is B8G8R8Unorm
 
         // create the system
-        let system = template_systems::forward_msaa_depth(queue.clone());
+        let system = template_systems::forward_with_depth(queue.clone());
         let render_pass = system.get_passes()[0].get_render_pass().clone();
 
         let camera = OrbitCamera::default();
@@ -93,10 +88,8 @@ impl<'a> App<'a> {
             events_handler,
             device,
             queue,
-            render_pass,
             done: false,
             command_buffer: None,
-            multisampling_enabled,
             world,
             vk_window,
             system,
@@ -112,30 +105,25 @@ impl<'a> App<'a> {
     }
 
     pub fn enable_multisampling(&mut self) {
-        self.multisampling_enabled = true;
-        self.render_pass =
-            render_passes::multisampled_with_depth(self.device.clone(), MULTISAMPLING_FACTOR);
-        self.update_render_pass();
+        // TODO: just delete these and make the user change the system themselves
+        let new_system = template_systems::forward_msaa_depth(self.queue.clone());
+        self.update_system(new_system);
     }
 
     pub fn disable_multisampling(&mut self) {
-        self.multisampling_enabled = false;
-        self.render_pass = render_passes::with_depth(self.device.clone());
-        self.update_render_pass();
+        let new_system = template_systems::forward_with_depth(self.queue.clone());
+        self.update_system(new_system);
     }
 
-    pub fn set_render_pass(&mut self, render_pass: Arc<dyn RenderPassAbstract + Send + Sync>) {
-        self.render_pass = render_pass;
-        self.update_render_pass();
-    }
-
-    fn update_render_pass(&mut self) {
-        // call this whenever you change the renderr pass
-        // commented out because of testing the deferred pipeline
-        // self.vk_window.update_render_pass(self.render_pass.clone());
-        // self.vk_window.rebuild();
-        println!("You shouldn't be calling update_render_pass, it's broken atm!");
-        self.world.update_render_pass(self.render_pass.clone());
+    pub fn update_system(&mut self, system: System<'a>) {
+        // for now it assumes a single pass is used in the system
+        // TODO: make it so it can figure out which pass belongs to the world
+        // and which belongs to the window
+        let render_pass = system.get_passes()[0].get_render_pass();
+        self.vk_window.update_render_pass(render_pass.clone());
+        self.vk_window.rebuild();
+        self.world.update_render_pass(render_pass.clone());
+        self.system = system;
     }
 
     pub fn draw_frame(&mut self) {
@@ -198,8 +186,8 @@ impl<'a> App<'a> {
     }
 
     fn submit_and_check(&mut self) {
-    //     self.vk_window
-    //         .submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
+        //     self.vk_window
+        //         .submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
     }
 }
 

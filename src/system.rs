@@ -19,7 +19,7 @@ use crate::render_passes;
 // A system is a list of passes that takes a bunch of data and produces a frame
 // for it.
 pub struct System<'a> {
-    pub passes: Vec<Pass<'a>>,
+    pub passes: Vec<Box<dyn Pass>>,
     sampler: Arc<Sampler>,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
@@ -46,26 +46,28 @@ pub struct System<'a> {
 // Simple means the system will create a square that fills the screen and run
 // the shaders on that. Complex is what you'd use for rendering the actual
 // geometry, providing your own objects.
-pub enum Pass<'a> {
-    Complex {
-        images_created: Vec<&'a str>,
-        images_needed: Vec<&'a str>,
-        resources_needed: Vec<&'a str>,
-        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-    },
-    Simple {
-        images_created: Vec<&'a str>,
-        images_needed: Vec<&'a str>,
-        resources_needed: Vec<&'a str>,
-        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-        // because no objects are passed to a SimplePass, the pipeline is set for
-        // the whole pass instead of individual objects
-        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    },
+
+pub struct ComplexPass<'a> {
+    pub images_created: Vec<&'a str>,
+    pub images_needed: Vec<&'a str>,
+    pub resources_needed: Vec<&'a str>,
+    pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+}
+
+pub struct SimplePass<'a> {
+    pub images_created: Vec<&'a str>,
+    pub images_needed: Vec<&'a str>,
+    pub resources_needed: Vec<&'a str>,
+    pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    // because no objects are passed to a Simple Pass, the pipeline is set
+    // for the whole pass instead of individual objects
+    // the shaders are included in the pipeline, so they are also part of
+    // this
+    pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
 }
 
 impl<'a> System<'a> {
-    pub fn new(queue: Arc<Queue>, passes: Vec<Pass<'a>>, output_tag: &'a str) -> Self {
+    pub fn new(queue: Arc<Queue>, passes: Vec<Box<dyn Pass>>, output_tag: &'a str) -> Self {
         let device = queue.device().clone();
 
         let sampler = Sampler::new(
@@ -145,7 +147,10 @@ impl<'a> System<'a> {
                 let image = if *image_tag == self.output_tag {
                     dest_image.clone()
                 } else {
-                    let desc = pass.get_render_pass().attachment_desc(image_idx).expect("pls no");
+                    let desc = pass
+                        .get_render_pass()
+                        .attachment_desc(image_idx)
+                        .expect("pls no");
                     create_image_for_desc(self.device.clone(), dimensions, desc)
                 };
 
@@ -158,9 +163,11 @@ impl<'a> System<'a> {
         }
 
         // create the command buffer
-        let mut cmd_buf_builder =
-            AutoCommandBufferBuilder::primary_one_time_submit(self.device.clone(), self.queue.family())
-                .unwrap();
+        let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
+            self.device.clone(),
+            self.queue.family(),
+        )
+        .unwrap();
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
 
@@ -172,13 +179,14 @@ impl<'a> System<'a> {
 
             // if it's a complex pass take the objects we were given, if it's a
             // simple one just use a screen-villing vbuf
-            let pass_objects = match pass {
-                Pass::Complex { .. } => objects[idx].clone(),
-                Pass::Simple { pipeline, ..} => vec![RenderableObject {
-                    pipeline: pipeline.clone(),
+            let pass_objects = if pass.provides_own_geometry() {
+                objects[idx].clone()
+            } else {
+                vec![RenderableObject {
+                    pipeline: pass.get_pipeline(),
                     vbuf: self.simple_vbuf.clone(),
                     additional_resources: None,
-                }],
+                }]
             };
 
             for object in pass_objects.iter() {
@@ -228,11 +236,24 @@ impl<'a> System<'a> {
 
         let final_cmd_buf = cmd_buf_builder.build().unwrap();
 
-        Box::new(future.then_execute(self.queue.clone(), final_cmd_buf).unwrap())
+        Box::new(
+            future
+                .then_execute(self.queue.clone(), final_cmd_buf)
+                .unwrap(),
+        )
     }
 
-    pub fn get_passes(&self) -> &[Pass] {
+    pub fn get_passes(&self) -> &[Box<dyn Pass>] {
         &self.passes
+    }
+
+    pub fn set_pass(
+        &mut self,
+        index: usize,
+        new_pass: Box<dyn Pass>,
+    ) {
+        // TODO: make a method that returns a mutable slice of all passes
+        self.passes[index] = new_pass;
     }
 }
 
@@ -417,38 +438,66 @@ fn fb_from_images(
     }
 }
 
-impl<'a> Pass<'a> {
-    pub fn get_images_created(&self) -> Vec<&str> {
-        match self {
-            Pass::Complex { images_created, .. } => images_created.clone(),
-            Pass::Simple { images_created, .. } => images_created.clone(),
-        }
+impl<'a> Pass for SimplePass<'a> {
+    fn get_images_created(&self) -> Vec<&str> {
+        self.images_created.clone()
     }
 
-    pub fn get_images_needed(&self) -> Vec<&str> {
-        match self {
-            Pass::Complex { images_needed, .. } => images_needed.clone(),
-            Pass::Simple { images_needed, .. } => images_needed.clone(),
-        }
+    fn get_images_needed(&self) -> Vec<&str> {
+        self.images_needed.clone()
     }
 
-    pub fn get_resources_needed(&self) -> Vec<&str> {
-        match self {
-            Pass::Complex {
-                resources_needed, ..
-            } => resources_needed.clone(),
-            Pass::Simple {
-                resources_needed, ..
-            } => resources_needed.clone(),
-        }
+    fn get_resources_needed(&self) -> Vec<&str> {
+        self.resources_needed.clone()
     }
 
-    pub fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
-        match self {
-            Pass::Complex { render_pass, .. } => render_pass.clone(),
-            Pass::Simple { render_pass, .. } => render_pass.clone(),
-        }
+    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
+        self.render_pass.clone()
     }
+
+    fn provides_own_geometry(&self) -> bool {
+        false
+    }
+
+    fn get_pipeline(&self) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
+        self.pipeline.clone()
+    }
+}
+
+impl<'a> Pass for ComplexPass<'a> {
+    fn get_images_created(&self) -> Vec<&str> {
+        self.images_created.clone()
+    }
+
+    fn get_images_needed(&self) -> Vec<&str> {
+        self.images_needed.clone()
+    }
+
+    fn get_resources_needed(&self) -> Vec<&str> {
+        self.resources_needed.clone()
+    }
+
+    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
+        self.render_pass.clone()
+    }
+
+    fn provides_own_geometry(&self) -> bool {
+        true
+    }
+
+    fn get_pipeline(&self) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
+        panic!("You tried to get the pipeline from pass that provides its own geometry!");
+    }
+}
+
+pub trait Pass {
+    fn get_images_created(&self) -> Vec<&str>;
+    fn get_images_needed(&self) -> Vec<&str>;
+    fn get_resources_needed(&self) -> Vec<&str>;
+    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync>;
+    fn provides_own_geometry(&self) -> bool;
+    // TODO: make this less of a mess. Maybe get enums to work again? idk
+    fn get_pipeline(&self) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync>;
 }
 
 #[derive(Default, Debug, Clone)]

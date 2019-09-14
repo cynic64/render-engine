@@ -299,3 +299,9 @@ impl ObjectSpecBuilder {
         ObjectSpec { mesh, material, model_matrix }
     }
 }
+
+// trait for data that needs to be passed to the shaders that changes every
+// frame
+pub trait DynamicData {
+    fn get_data(&mut self, frame_info: FrameInfo) -> Arc<dyn BufferAccess + Send + Sync>;
+}
