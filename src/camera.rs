@@ -5,6 +5,11 @@ use self::glm::*;
 use crate::exposed_tools::*;
 use crate::input::*;
 
+use std::sync::Arc;
+use vulkano::buffer::BufferAccess;
+use vulkano::device::Device;
+
+#[derive(Clone)]
 pub struct OrbitCamera {
     pub center_position: Vec3,
     pub front: Vec3,
@@ -16,6 +21,8 @@ pub struct OrbitCamera {
     pub yaw: f32,
     pub orbit_distance: f32,
     mouse_sens: f32,
+    view_mat: CameraMatrix,
+    proj_mat: CameraMatrix,
 }
 
 impl OrbitCamera {
@@ -34,6 +41,9 @@ impl OrbitCamera {
         let mouse_sens = 0.0007;
         let orbit_distance = 4.0;
 
+        let view_mat: CameraMatrix = glm::Mat4::identity().into();
+        let proj_mat: CameraMatrix = glm::Mat4::identity().into();
+
         Self {
             center_position,
             front,
@@ -44,33 +54,17 @@ impl OrbitCamera {
             yaw,
             orbit_distance,
             mouse_sens,
+            view_mat,
+            proj_mat,
         }
-    }
-
-    fn update(&mut self) {
-        self.front = normalize(&vec3(
-            self.pitch.cos() * self.yaw.cos(),
-            self.pitch.sin(),
-            self.pitch.cos() * self.yaw.sin(),
-        ));
-
-        self.right = normalize(&glm::Vec3::cross(&self.front, &self.world_up));
     }
 }
 
-impl Camera for OrbitCamera {
-    fn get_view_matrix(&self) -> [[f32; 4]; 4] {
-        // orbits at 4 units away
-        let farther_front = self.front * self.orbit_distance;
-        look_at(
-            &(self.center_position + farther_front),
-            &self.center_position,
-            &self.up,
-        )
-        .into()
-    }
-
-    fn handle_input(&mut self, frame_info: FrameInfo) {
+use crate::world::ResourceProducer;
+impl ResourceProducer for OrbitCamera {
+    fn update(&mut self, frame_info: FrameInfo) {
+        // TODO: a lot of the stuff stored in OrbitCamera doesn't need to be
+        // stored across frames
         let x = frame_info.mouse_movement[0];
         let y = frame_info.mouse_movement[1];
 
@@ -86,8 +80,56 @@ impl Camera for OrbitCamera {
             self.pitch = -max_pitch;
         }
 
-        self.update();
+        // recompute front vector
+        self.front = normalize(&vec3(
+            self.pitch.cos() * self.yaw.cos(),
+            self.pitch.sin(),
+            self.pitch.cos() * self.yaw.sin(),
+        ));
+
+        self.right = normalize(&glm::Vec3::cross(&self.front, &self.world_up));
+
+        // recompute view and projection matrices
+        let farther_front = self.front * self.orbit_distance;
+        self.view_mat = look_at(
+            &(self.center_position + farther_front),
+            &self.center_position,
+            &self.up,
+        )
+        .into();
+
+        let dims = frame_info.dimensions;
+        let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
+        self.proj_mat = glm::perspective(
+            aspect_ratio,
+            // fov
+            1.0,
+            // near
+            0.1,
+            // far
+            100_000_000.,
+        )
+        .into();
     }
+
+    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
+        let pool = vulkano::buffer::cpu_pool::CpuBufferPool::<CameraData>::new(
+            device.clone(),
+            vulkano::buffer::BufferUsage::all(),
+        );
+
+        let data = CameraData {
+            view: self.view_mat,
+            proj: self.proj_mat,
+        };
+        Arc::new(pool.next(data).unwrap())
+    }
+}
+
+#[allow(dead_code)]
+struct CameraData {
+    view: CameraMatrix,
+    proj: CameraMatrix,
 }
 
 pub struct FlyCamera {

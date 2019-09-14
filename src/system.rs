@@ -125,6 +125,7 @@ impl<'a> System<'a> {
         // TODO: switch to a hashmap for this, with keys being the pass and a
         // list of objects for each
         objects: Vec<Vec<RenderableObject>>,
+        // TODO: add typedefs for stuff like shared_resources
         shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>>,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
@@ -168,6 +169,7 @@ impl<'a> System<'a> {
             self.queue.family(),
         )
         .unwrap();
+
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
 
@@ -205,7 +207,8 @@ impl<'a> System<'a> {
                     .collect();
 
                 if let Some(additional_resources) = &object.additional_resources {
-                    resources_needed.push(additional_resources.clone());
+                    panic!("additional resources are non-functional right now");
+                    // resources_needed.push(additional_resources.clone());
                 }
 
                 let image_set =

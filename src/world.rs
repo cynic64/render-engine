@@ -17,7 +17,8 @@ pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 extern crate nalgebra_glm as glm;
 
 // the world stores objects and can produce a list of renderable objects
-pub struct World {
+// TODO: switch from String to &str
+pub struct World<'a> {
     objects: HashMap<String, (ObjectSpec, RenderableObject)>,
     // we need to use an option to get around the borrow checker later
     // soooooorry
@@ -27,8 +28,7 @@ pub struct World {
     command_send: Sender<Command>,
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     device: Arc<Device>,
-    mvp: MVP,
-    camera: Box<dyn Camera>,
+    resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
 }
 
 #[derive(Clone)]
@@ -51,7 +51,6 @@ pub enum Command {
 pub struct ObjectSpec {
     mesh: Box<dyn Mesh>,
     material: Material,
-    model_matrix: CameraMatrix,
 }
 
 pub trait Mesh {
@@ -74,21 +73,13 @@ struct Material {
     pub shaders: ShaderSystem,
 }
 
-impl World {
+impl<'a> World<'a> {
     pub fn new(
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
         device: Arc<Device>,
-        camera: Box<dyn Camera>,
+        resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
     ) -> Self {
         let (sender, receiver): (Sender<Command>, Receiver<Command>) = mpsc::channel();
-
-        let model: CameraMatrix =
-            glm::scale(&glm::Mat4::identity(), &glm::vec3(1.0, 1.0, 1.0)).into();
-        let mvp = MVP {
-            model,
-            view: camera.get_view_matrix(),
-            proj: camera.get_projection_matrix(),
-        };
 
         Self {
             objects: HashMap::new(),
@@ -96,9 +87,14 @@ impl World {
             command_send: sender,
             render_pass,
             device,
-            mvp,
-            camera,
+            resource_producers,
         }
+    }
+
+    // TODO: make naming more consistent throughout the crate.
+    // should it be set or update?
+    pub fn set_resource_producers(&mut self, resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>) {
+        self.resource_producers = resource_producers;
     }
 
     pub fn update_render_pass(
@@ -106,10 +102,6 @@ impl World {
         new_renderpass: Arc<dyn RenderPassAbstract + Send + Sync>,
     ) {
         self.render_pass = new_renderpass;
-    }
-
-    pub fn update_camera(&mut self, camera: Box<dyn Camera>) {
-        self.camera = camera;
     }
 
     pub fn get_communicator(&self) -> WorldCommunicator {
@@ -144,7 +136,17 @@ impl World {
     }
 
     pub fn get_objects(&self) -> Vec<RenderableObject> {
-        self.objects.values().map(|(_spec, obj)| obj.clone()).collect()
+        self.objects
+            .values()
+            .map(|(_spec, obj)| obj.clone())
+            .collect()
+    }
+
+    pub fn get_resources(&self, device: Arc<Device>) -> HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> {
+        self.resource_producers
+            .iter()
+            .map(|(&name, producer)| (name, producer.create_buffer(device.clone())))
+            .collect()
     }
 
     pub fn delete_object(&mut self, id: String) {
@@ -153,36 +155,9 @@ impl World {
 
     pub fn update(&mut self, frame_info: FrameInfo) {
         self.check_for_commands();
-        self.camera.handle_input(frame_info.clone());
-        self.update_resources();
-        self.mvp.view = self.camera.get_view_matrix();
-        self.mvp.proj = self.camera.get_projection_matrix();
-    }
-
-    fn update_resources(&mut self) {
-        let device = self.device.clone();
-        let view = self.mvp.view;
-        let proj = self.mvp.proj;
-
-        self.objects.values_mut().for_each(|(spec, obj)| {
-            let uniform_buffer = vulkano::buffer::cpu_pool::CpuBufferPool::<MVP>::new(
-                device.clone(),
-                vulkano::buffer::BufferUsage::all(),
-            );
-
-            // TODO: separate model matrix from the rest bc it is the only one
-            // that changes between objects
-            let uniform_buffer_subbuffer = {
-                let uniform_data = MVP {
-                    model: spec.model_matrix,
-                    view: view,
-                    proj: proj,
-                };
-                uniform_buffer.next(uniform_data).unwrap()
-            };
-
-            obj.additional_resources = Some(Arc::new(uniform_buffer_subbuffer.clone()))
-        });
+        self.resource_producers
+            .values_mut()
+            .for_each(|u_p| u_p.update(frame_info.clone()));
     }
 
     fn check_for_commands(&mut self) {
@@ -228,7 +203,6 @@ pub struct ObjectSpecBuilder {
     custom_mesh: Option<Box<dyn Mesh>>,
     custom_fill_type: Option<PrimitiveTopology>,
     custom_shaders: Option<ShaderSystem>,
-    custom_model_matrix: Option<CameraMatrix>
 }
 
 impl ObjectSpecBuilder {
@@ -237,7 +211,6 @@ impl ObjectSpecBuilder {
             custom_mesh: None,
             custom_fill_type: None,
             custom_shaders: None,
-            custom_model_matrix: None,
         }
     }
 
@@ -251,13 +224,6 @@ impl ObjectSpecBuilder {
     pub fn shaders(self, shaders: ShaderSystem) -> Self {
         Self {
             custom_shaders: Some(shaders),
-            ..self
-        }
-    }
-
-    pub fn model_matrix(self, model_matrix: CameraMatrix) -> Self {
-        Self {
-            custom_model_matrix: Some(model_matrix),
             ..self
         }
     }
@@ -293,15 +259,16 @@ impl ObjectSpecBuilder {
             ))
         });
 
-        // if no model matrix is provided, use the identity matrix
-        let model_matrix = self.custom_model_matrix.unwrap_or(glm::Mat4::identity().into());
-
-        ObjectSpec { mesh, material, model_matrix }
+        ObjectSpec {
+            mesh,
+            material,
+        }
     }
 }
 
 // trait for data that needs to be passed to the shaders that changes every
-// frame
-pub trait DynamicData {
-    fn get_data(&mut self, frame_info: FrameInfo) -> Arc<dyn BufferAccess + Send + Sync>;
+// frame. not to be used for specific objects.
+pub trait ResourceProducer {
+    fn update(&mut self, frame_info: FrameInfo);
+    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
 }

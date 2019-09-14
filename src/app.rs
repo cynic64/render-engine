@@ -4,7 +4,6 @@ use crate::camera::*;
 use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
-use crate::render_passes;
 use crate::system::System;
 use crate::template_systems;
 use crate::world::*;
@@ -17,7 +16,7 @@ pub struct App<'a> {
     queue: Arc<Queue>,
     pub done: bool,
     command_buffer: Option<AutoCommandBuffer>,
-    world: World,
+    world: World<'a>,
     vk_window: ll::vk_window::VkWindow,
     system: System<'a>,
 }
@@ -27,8 +26,6 @@ struct SimpleVertex {
     position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex, position);
-
-const MULTISAMPLING_FACTOR: u32 = 4;
 
 impl<'a> App<'a> {
     pub fn new() -> Self {
@@ -73,8 +70,9 @@ impl<'a> App<'a> {
         let render_pass = system.get_passes()[0].get_render_pass().clone();
 
         let camera = OrbitCamera::default();
-
-        let world = World::new(render_pass.clone(), device.clone(), Box::new(camera));
+        let mut resource_producers: HashMap<&str, Box<dyn ResourceProducer>> = HashMap::new();
+        resource_producers.insert("view_proj", Box::new(camera));
+        let world = World::new(render_pass.clone(), device.clone(), resource_producers);
 
         let vk_window = ll::vk_window::VkWindow::new(
             device.clone(),
@@ -96,8 +94,8 @@ impl<'a> App<'a> {
         }
     }
 
-    pub fn update_camera(&mut self, camera: Box<dyn Camera>) {
-        self.world.update_camera(camera);
+    pub fn set_world_resource_producers(&mut self, resource_producers: HashMap<&'static str, Box<dyn ResourceProducer>>) {
+        self.world.set_resource_producers(resource_producers);
     }
 
     pub fn get_world_com(&self) -> WorldCommunicator {
@@ -172,7 +170,8 @@ impl<'a> App<'a> {
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
 
-        let shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = HashMap::new();
+        // TODO: make this more flexible
+        let shared_resources = self.world.get_resources(self.device.clone());
 
         let frame_fut = self.system.draw_frame(
             self.vk_window.get_dimensions(),
