@@ -1,6 +1,5 @@
 extern crate nalgebra_glm as glm;
 
-use crate::camera::*;
 use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
@@ -8,7 +7,6 @@ use crate::system::System;
 use crate::template_systems;
 use crate::world::*;
 
-use std::collections::HashMap;
 
 pub struct App<'a> {
     events_handler: EventHandler,
@@ -16,7 +14,7 @@ pub struct App<'a> {
     queue: Arc<Queue>,
     pub done: bool,
     command_buffer: Option<AutoCommandBuffer>,
-    world: World<'a>,
+    world: World,
     vk_window: ll::vk_window::VkWindow,
     system: System<'a>,
 }
@@ -69,10 +67,7 @@ impl<'a> App<'a> {
         let system = template_systems::forward_with_depth(queue.clone());
         let render_pass = system.get_passes()[0].get_render_pass().clone();
 
-        let camera = OrbitCamera::default();
-        let mut resource_producers: HashMap<&str, Box<dyn ResourceProducer>> = HashMap::new();
-        resource_producers.insert("view_proj", Box::new(camera));
-        let world = World::new(render_pass.clone(), device.clone(), resource_producers);
+        let world = World::new(render_pass.clone(), device.clone());
 
         let vk_window = ll::vk_window::VkWindow::new(
             device.clone(),
@@ -94,26 +89,15 @@ impl<'a> App<'a> {
         }
     }
 
-    pub fn set_world_resource_producers(&mut self, resource_producers: HashMap<&'static str, Box<dyn ResourceProducer>>) {
-        self.world.set_resource_producers(resource_producers);
-    }
-
     pub fn get_world_com(&self) -> WorldCommunicator {
         self.world.get_communicator()
     }
 
-    pub fn enable_multisampling(&mut self) {
-        // TODO: just delete these and make the user change the system themselves
-        let new_system = template_systems::forward_msaa_depth(self.queue.clone());
-        self.update_system(new_system);
-    }
+    // TODO: create a separate module for managing systems. hopefully it would
+    // let you do stuff like compose whether multisampling was enabled and AO
+    // and all that
 
-    pub fn disable_multisampling(&mut self) {
-        let new_system = template_systems::forward_with_depth(self.queue.clone());
-        self.update_system(new_system);
-    }
-
-    pub fn update_system(&mut self, system: System<'a>) {
+    pub fn set_system(&mut self, system: System<'a>) {
         // for now it assumes a single pass is used in the system
         // TODO: make it so it can figure out which pass belongs to the world
         // and which belongs to the window
@@ -130,11 +114,13 @@ impl<'a> App<'a> {
         self.create_command_buffer();
         self.submit_and_check();
 
-        self.update_world();
+        self.handle_input();
+        self.world.update();
     }
 
-    fn update_world(&mut self) {
-        self.world.update(self.events_handler.frame_info.clone());
+    fn handle_input(&mut self) {
+        // TODO: why the hell does system take care of this?
+        self.system.update_resources(self.events_handler.frame_info.clone());
     }
 
     pub fn print_fps(&self) {
@@ -144,6 +130,10 @@ impl<'a> App<'a> {
 
     pub fn get_device(&self) -> Arc<Device> {
         self.device.clone()
+    }
+
+    pub fn get_queue(&self) -> Arc<Queue> {
+        self.queue.clone()
     }
 
     fn setup_frame(&mut self) {
@@ -170,13 +160,9 @@ impl<'a> App<'a> {
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
 
-        // TODO: make this more flexible
-        let shared_resources = self.world.get_resources(self.device.clone());
-
         let frame_fut = self.system.draw_frame(
             self.vk_window.get_dimensions(),
             all_renderable_objects,
-            shared_resources,
             swapchain_image,
             swapchain_fut,
         );

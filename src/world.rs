@@ -18,7 +18,7 @@ extern crate nalgebra_glm as glm;
 
 // the world stores objects and can produce a list of renderable objects
 // TODO: switch from String to &str
-pub struct World<'a> {
+pub struct World {
     objects: HashMap<String, (ObjectSpec, RenderableObject)>,
     // we need to use an option to get around the borrow checker later
     // soooooorry
@@ -28,7 +28,6 @@ pub struct World<'a> {
     command_send: Sender<Command>,
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     device: Arc<Device>,
-    resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
 }
 
 #[derive(Clone)]
@@ -73,11 +72,10 @@ struct Material {
     pub shaders: ShaderSystem,
 }
 
-impl<'a> World<'a> {
+impl World {
     pub fn new(
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
         device: Arc<Device>,
-        resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
     ) -> Self {
         let (sender, receiver): (Sender<Command>, Receiver<Command>) = mpsc::channel();
 
@@ -87,16 +85,11 @@ impl<'a> World<'a> {
             command_send: sender,
             render_pass,
             device,
-            resource_producers,
         }
     }
 
     // TODO: make naming more consistent throughout the crate.
     // should it be set or update?
-    pub fn set_resource_producers(&mut self, resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>) {
-        self.resource_producers = resource_producers;
-    }
-
     pub fn update_render_pass(
         &mut self,
         new_renderpass: Arc<dyn RenderPassAbstract + Send + Sync>,
@@ -142,22 +135,12 @@ impl<'a> World<'a> {
             .collect()
     }
 
-    pub fn get_resources(&self, device: Arc<Device>) -> HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> {
-        self.resource_producers
-            .iter()
-            .map(|(&name, producer)| (name, producer.create_buffer(device.clone())))
-            .collect()
-    }
-
     pub fn delete_object(&mut self, id: String) {
         self.objects.remove(&id);
     }
 
-    pub fn update(&mut self, frame_info: FrameInfo) {
+    pub fn update(&mut self) {
         self.check_for_commands();
-        self.resource_producers
-            .values_mut()
-            .for_each(|u_p| u_p.update(frame_info.clone()));
     }
 
     fn check_for_commands(&mut self) {
@@ -264,11 +247,4 @@ impl ObjectSpecBuilder {
             material,
         }
     }
-}
-
-// trait for data that needs to be passed to the shaders that changes every
-// frame. not to be used for specific objects.
-pub trait ResourceProducer {
-    fn update(&mut self, frame_info: FrameInfo);
-    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
 }

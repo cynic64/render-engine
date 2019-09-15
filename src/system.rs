@@ -16,26 +16,39 @@ use std::sync::Arc;
 
 use crate::render_passes;
 
+// TODO: make the whole thing less prone to runtime panics. vecs of strings are
+// a little sketchy. Maybe make a function that checks the system to ensure
+// it'll work?
+// maybe also make it so that one component changes, all the others are forced
+// to update too. Because if a producer is added, the shaders -will- have to
+// change.
+
 // A system is a list of passes that takes a bunch of data and produces a frame
 // for it.
 pub struct System<'a> {
-    pub passes: Vec<Box<dyn Pass>>,
+    passes: Vec<Box<dyn Pass>>,
     sampler: Arc<Sampler>,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     output_tag: &'a str,
+    resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
 }
 
+// TODO: some of the docs below are BS, because in a complex pass the vertex
+// shader and fragment combo is not always the same (different objects can have
+// different pipelines and all that). Make it consistent!
+// maybe rename to PixelPass and GeoPass and include a 3rd option for different
+// objects with different pipelines
+
 // A pass is a single operation carried out by a vertex shader and fragment
-// shader combination.
-// For example: a geometry pass to draw some objects in 3D space
-//   it would only have the 'MVP' need, because it wouldn't need any other images
-//   (like a G-buffer or something similar)
-// Another example: a lighting pass taking something previously rendered into a
-//   G-buffer. It would have a need of 'albedo', 'normal', 'position', or whatever
-//   you called the images when you created them in a geometry pass.
+// shader combination. For example: a geometry pass to draw some objects in 3D
+// space it would only have the 'MVP' need, because it wouldn't need any other
+// images (like a G-buffer or something similar) Another example: a lighting
+// pass taking something previously rendered into a G-buffer. It would have a
+// need of 'albedo', 'normal', 'position', or whatever you called the images
+// when you created them in a geometry pass.
 //
 // When used in a system, the system will create all the necessary images first,
 //   and add the needed images to a uniform buffer
@@ -67,7 +80,12 @@ pub struct SimplePass<'a> {
 }
 
 impl<'a> System<'a> {
-    pub fn new(queue: Arc<Queue>, passes: Vec<Box<dyn Pass>>, output_tag: &'a str) -> Self {
+    pub fn new(
+        queue: Arc<Queue>,
+        passes: Vec<Box<dyn Pass>>,
+        output_tag: &'a str,
+        resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
+    ) -> Self {
         let device = queue.device().clone();
 
         let sampler = Sampler::new(
@@ -116,7 +134,21 @@ impl<'a> System<'a> {
             device,
             queue,
             output_tag,
+            resource_producers,
         }
+    }
+
+    // TODO: I don't like System controlling updates on things like the camera.
+    // it doesn't make sense :/
+    // maybe it makes more sense to pass shared_resources after all and have app manage all that crap
+    pub fn update_resources(&mut self, frame_info: FrameInfo) {
+        self.resource_producers.values_mut().for_each(|prod| prod.update(frame_info.clone()));
+    }
+
+    // TODO: more consistent naming: should things that set an internal value to
+    // one passed to them take new_x or just x as an argument?
+    pub fn set_resource_producers(&mut self, new_resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>) {
+        self.resource_producers = new_resource_producers;
     }
 
     pub fn draw_frame<F>(
@@ -125,15 +157,13 @@ impl<'a> System<'a> {
         // TODO: switch to a hashmap for this, with keys being the pass and a
         // list of objects for each
         objects: Vec<Vec<RenderableObject>>,
-        // TODO: add typedefs for stuff like shared_resources
-        shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>>,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
     ) -> Box<dyn GpuFuture>
     where
         F: GpuFuture + 'static,
     {
-        // TODO: change vk_window so you submit an image rather than a command buffer
+        // TODO: change vk_window so you submit an image
 
         // create dynamic state (will be the same for every draw call)
         let dynamic_state = dynamic_state_for_dimensions(dimensions);
@@ -162,6 +192,13 @@ impl<'a> System<'a> {
             let framebuffer = fb_from_images(pass.get_render_pass().clone(), images_for_pass);
             framebuffers.push(framebuffer);
         }
+
+        // get shared resources
+        // TODO: somehow ensure update was called on all of them earlier
+        let shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = self.resource_producers
+            .iter()
+            .map(|(&name, producer)| (name, producer.create_buffer(self.device.clone())))
+            .collect();
 
         // create the command buffer
         let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
@@ -200,16 +237,16 @@ impl<'a> System<'a> {
                     .map(|tag| images.get(tag).expect("missing key").clone())
                     .collect();
 
-                let mut resources_needed: Vec<_> = pass
+                let resources_needed: Vec<_> = pass
                     .get_resources_needed()
                     .iter()
                     .map(|tag| shared_resources.get(tag).expect("missing key").clone())
                     .collect();
 
-                if let Some(additional_resources) = &object.additional_resources {
-                    panic!("additional resources are non-functional right now");
-                    // resources_needed.push(additional_resources.clone());
-                }
+                // if let Some(additional_resources) = &object.additional_resources {
+                //     panic!("additional resources are non-functional right now");
+                //     // resources_needed.push(additional_resources.clone());
+                // }
 
                 let image_set =
                     pds_for_images(self.sampler.clone(), object.pipeline.clone(), images_needed);
@@ -250,11 +287,7 @@ impl<'a> System<'a> {
         &self.passes
     }
 
-    pub fn set_pass(
-        &mut self,
-        index: usize,
-        new_pass: Box<dyn Pass>,
-    ) {
+    pub fn set_pass(&mut self, index: usize, new_pass: Box<dyn Pass>) {
         // TODO: make a method that returns a mutable slice of all passes
         self.passes[index] = new_pass;
     }
@@ -508,3 +541,12 @@ struct SimpleVertex {
     position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex, position);
+
+// trait for data that needs to be passed to the shaders that changes every
+// frame. not to be used for specific objects.
+use crate::input::FrameInfo;
+
+pub trait ResourceProducer {
+    fn update(&mut self, frame_info: FrameInfo);
+    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
+}

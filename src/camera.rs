@@ -60,7 +60,7 @@ impl OrbitCamera {
     }
 }
 
-use crate::world::ResourceProducer;
+use crate::system::ResourceProducer;
 impl ResourceProducer for OrbitCamera {
     fn update(&mut self, frame_info: FrameInfo) {
         // TODO: a lot of the stuff stored in OrbitCamera doesn't need to be
