@@ -10,6 +10,9 @@ pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
 
 pub mod template_systems;
 
+// TODO: organize this whole file better and get rid of exposed_tools
+pub mod producer;
+
 pub mod input;
 
 pub mod shaders;

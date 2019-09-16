@@ -60,7 +60,7 @@ impl OrbitCamera {
     }
 }
 
-use crate::system::ResourceProducer;
+use crate::producer::ResourceProducer;
 impl ResourceProducer for OrbitCamera {
     fn update(&mut self, frame_info: FrameInfo) {
         // TODO: a lot of the stuff stored in OrbitCamera doesn't need to be
@@ -123,6 +123,10 @@ impl ResourceProducer for OrbitCamera {
             proj: self.proj_mat,
         };
         Arc::new(pool.next(data).unwrap())
+    }
+
+    fn name(&self) -> &str {
+        "view_proj"
     }
 }
 

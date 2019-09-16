@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::render_passes;
+use crate::producer::SharedResources;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -33,7 +34,6 @@ pub struct System<'a> {
     device: Arc<Device>,
     queue: Arc<Queue>,
     output_tag: &'a str,
-    resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
 }
 
 // TODO: some of the docs below are BS, because in a complex pass the vertex
@@ -41,6 +41,7 @@ pub struct System<'a> {
 // different pipelines and all that). Make it consistent!
 // maybe rename to PixelPass and GeoPass and include a 3rd option for different
 // objects with different pipelines
+// How bout PixelPass, HomoGeoPass and HeteroGeoPass?
 
 // A pass is a single operation carried out by a vertex shader and fragment
 // shader combination. For example: a geometry pass to draw some objects in 3D
@@ -55,7 +56,6 @@ pub struct System<'a> {
 //   'mvp' is a special kind of needed image, it'll add the mvp instead
 //   this is temporary, it's a shitty solution
 
-// TODO: maybe use a trait for this instead
 // Simple means the system will create a square that fills the screen and run
 // the shaders on that. Complex is what you'd use for rendering the actual
 // geometry, providing your own objects.
@@ -84,7 +84,6 @@ impl<'a> System<'a> {
         queue: Arc<Queue>,
         passes: Vec<Box<dyn Pass>>,
         output_tag: &'a str,
-        resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>,
     ) -> Self {
         let device = queue.device().clone();
 
@@ -134,21 +133,7 @@ impl<'a> System<'a> {
             device,
             queue,
             output_tag,
-            resource_producers,
         }
-    }
-
-    // TODO: I don't like System controlling updates on things like the camera.
-    // it doesn't make sense :/
-    // maybe it makes more sense to pass shared_resources after all and have app manage all that crap
-    pub fn update_resources(&mut self, frame_info: FrameInfo) {
-        self.resource_producers.values_mut().for_each(|prod| prod.update(frame_info.clone()));
-    }
-
-    // TODO: more consistent naming: should things that set an internal value to
-    // one passed to them take new_x or just x as an argument?
-    pub fn set_resource_producers(&mut self, new_resource_producers: HashMap<&'a str, Box<dyn ResourceProducer>>) {
-        self.resource_producers = new_resource_producers;
     }
 
     pub fn draw_frame<F>(
@@ -157,6 +142,7 @@ impl<'a> System<'a> {
         // TODO: switch to a hashmap for this, with keys being the pass and a
         // list of objects for each
         objects: Vec<Vec<RenderableObject>>,
+        shared_resources: SharedResources,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
     ) -> Box<dyn GpuFuture>
@@ -192,13 +178,6 @@ impl<'a> System<'a> {
             let framebuffer = fb_from_images(pass.get_render_pass().clone(), images_for_pass);
             framebuffers.push(framebuffer);
         }
-
-        // get shared resources
-        // TODO: somehow ensure update was called on all of them earlier
-        let shared_resources: HashMap<&str, Arc<dyn BufferAccess + Send + Sync>> = self.resource_producers
-            .iter()
-            .map(|(&name, producer)| (name, producer.create_buffer(self.device.clone())))
-            .collect();
 
         // create the command buffer
         let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
@@ -285,11 +264,6 @@ impl<'a> System<'a> {
 
     pub fn get_passes(&self) -> &[Box<dyn Pass>] {
         &self.passes
-    }
-
-    pub fn set_pass(&mut self, index: usize, new_pass: Box<dyn Pass>) {
-        // TODO: make a method that returns a mutable slice of all passes
-        self.passes[index] = new_pass;
     }
 }
 
@@ -541,12 +515,3 @@ struct SimpleVertex {
     position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex, position);
-
-// trait for data that needs to be passed to the shaders that changes every
-// frame. not to be used for specific objects.
-use crate::input::FrameInfo;
-
-pub trait ResourceProducer {
-    fn update(&mut self, frame_info: FrameInfo);
-    fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
-}

@@ -6,7 +6,7 @@ use crate::internal_tools::*;
 use crate::system::System;
 use crate::template_systems;
 use crate::world::*;
-
+use crate::producer::ProducerCollection;
 
 pub struct App<'a> {
     events_handler: EventHandler,
@@ -17,6 +17,7 @@ pub struct App<'a> {
     world: World,
     vk_window: ll::vk_window::VkWindow,
     system: System<'a>,
+    producers: ProducerCollection,
 }
 
 #[derive(Default, Copy, Clone)]
@@ -64,7 +65,7 @@ impl<'a> App<'a> {
         // on my machine this is B8G8R8Unorm
 
         // create the system
-        let system = template_systems::forward_with_depth(queue.clone());
+        let (system, producers) = template_systems::forward_with_depth(queue.clone());
         let render_pass = system.get_passes()[0].get_render_pass().clone();
 
         let world = World::new(render_pass.clone(), device.clone());
@@ -82,10 +83,12 @@ impl<'a> App<'a> {
             device,
             queue,
             done: false,
+            // TODO; get rid of create of create_command_buffer and this
             command_buffer: None,
             world,
             vk_window,
             system,
+            producers,
         }
     }
 
@@ -97,6 +100,9 @@ impl<'a> App<'a> {
     // let you do stuff like compose whether multisampling was enabled and AO
     // and all that
 
+    // another idea: "optimizations" for different passes, kinda like vulkano's
+    // command buffers and images. For example, if there are never any
+    // additional resources, the check can be skipped.
     pub fn set_system(&mut self, system: System<'a>) {
         // for now it assumes a single pass is used in the system
         // TODO: make it so it can figure out which pass belongs to the world
@@ -106,6 +112,10 @@ impl<'a> App<'a> {
         self.vk_window.rebuild();
         self.world.update_render_pass(render_pass.clone());
         self.system = system;
+    }
+
+    pub fn set_producers(&mut self, new_producers: ProducerCollection) {
+        self.producers = new_producers;
     }
 
     pub fn draw_frame(&mut self) {
@@ -119,8 +129,7 @@ impl<'a> App<'a> {
     }
 
     fn handle_input(&mut self) {
-        // TODO: why the hell does system take care of this?
-        self.system.update_resources(self.events_handler.frame_info.clone());
+        self.producers.update(self.events_handler.frame_info.clone());
     }
 
     pub fn print_fps(&self) {
@@ -138,6 +147,7 @@ impl<'a> App<'a> {
 
     fn setup_frame(&mut self) {
         let dimensions = self.vk_window.get_dimensions();
+        // TODO: move this somewhere else
         self.done = self.events_handler.update(dimensions);
 
         // reset cursor to center
@@ -159,10 +169,12 @@ impl<'a> App<'a> {
         let all_renderable_objects = vec![world_renderable_objects];
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
+        let shared_resources = self.producers.get_shared_resources(self.device.clone());
 
         let frame_fut = self.system.draw_frame(
             self.vk_window.get_dimensions(),
             all_renderable_objects,
+            shared_resources,
             swapchain_image,
             swapchain_fut,
         );
