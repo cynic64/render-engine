@@ -110,7 +110,11 @@ pub fn clear_values_for_pass(
         .map(|desc| match desc.load {
             LoadOp::Clear => match desc.format {
                 Format::B8G8R8A8Unorm => [0.0, 0.0, 0.0, 1.0].into(),
+                Format::R8G8B8A8Unorm => [0.0, 0.0, 0.0, 1.0].into(),
+                Format::R32G32B32A32Sfloat => [0.0, 0.0, 0.0, 0.0].into(),
+                Format::R16G16B16A16Sfloat => [0.0, 0.0, 0.0, 0.0].into(),
                 Format::D16Unorm => 1f32.into(),
+                // TODO: make the panic print the bad format
                 _ => panic!("You provided a format that the clear values couldn't be guessed for!"),
             },
             LoadOp::DontCare => ClearValue::None,

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 // frame. not to be used for specific objects.
 // TODO: better docs
 pub trait ResourceProducer {
-    fn update(&mut self, frame_info: FrameInfo);
+    fn update(&mut self, _frame_info: FrameInfo) {}
     fn create_buffer(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
     fn name(&self) -> &str;
 }

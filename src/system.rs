@@ -227,9 +227,14 @@ impl<'a> System<'a> {
                 //     // resources_needed.push(additional_resources.clone());
                 // }
 
+                let resource_set_idx = if images_needed.len() >= 1 {
+                    1
+                } else {
+                    0
+                };
                 let image_set =
                     pds_for_images(self.sampler.clone(), object.pipeline.clone(), images_needed);
-                let resource_set = pds_for_resources(object.pipeline.clone(), resources_needed);
+                let resource_set = pds_for_resources(object.pipeline.clone(), resources_needed, resource_set_idx);
                 let sets_collection = match (image_set, resource_set) {
                     (None, None) => vec![],
                     (Some(real_image_set), None) => vec![real_image_set.clone()],
@@ -351,18 +356,19 @@ fn pds_for_images(
 fn pds_for_resources(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
+    set_idx: usize,
 ) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
     match resources.len() {
         0 => None,
         1 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(resources[0].clone())
                 .unwrap()
                 .build()
                 .unwrap(),
         )),
         2 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(resources[0].clone())
                 .unwrap()
                 .add_buffer(resources[1].clone())
@@ -371,7 +377,7 @@ fn pds_for_resources(
                 .unwrap(),
         )),
         3 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(resources[0].clone())
                 .unwrap()
                 .add_buffer(resources[1].clone())
@@ -382,7 +388,7 @@ fn pds_for_resources(
                 .unwrap(),
         )),
         4 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(resources[0].clone())
                 .unwrap()
                 .add_buffer(resources[1].clone())
@@ -511,7 +517,7 @@ pub trait Pass {
 }
 
 #[derive(Default, Debug, Clone)]
-struct SimpleVertex {
+pub struct SimpleVertex {
     position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex, position);

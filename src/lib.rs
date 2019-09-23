@@ -33,4 +33,4 @@ mod internal_tools;
 
 pub use re_ll as ll;
 
-vulkano::impl_vertex!(Vertex, position, color, normal);
+vulkano::impl_vertex!(Vertex, position, normal);

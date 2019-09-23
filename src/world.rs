@@ -238,7 +238,6 @@ impl ObjectSpecBuilder {
             Box::new(mesh_gen::create_vertices_for_cube(
                 [0.0, 0.0, 0.0],
                 1.0,
-                [1.0, 1.0, 1.0],
             ))
         });
 
