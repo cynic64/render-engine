@@ -5,15 +5,9 @@ pub use winit::VirtualKeyCode;
 
 use crate::internal_tools::*;
 
-use crate::input::FrameInfo;
+use crate::app::{CURSOR_RESET_POS_X, CURSOR_RESET_POS_Y};
 
-pub const CURSOR_RESET_POS_X: u32 = 50;
-pub const CURSOR_RESET_POS_Y: u32 = 50;
-
-extern crate nalgebra_glm as glm;
-use glm::*;
-
-pub type CameraMatrix = [[f32; 4]; 4];
+use crate::camera::CameraMatrix;
 
 pub struct KeyboardEvent {}
 
@@ -32,29 +26,6 @@ pub type AbstractVbuf = Arc<dyn BufferAccess + Send + Sync>;
 
 pub fn get_elapsed(start: std::time::Instant) -> f32 {
     start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0
-}
-
-pub trait Camera {
-    fn get_view_matrix(&self) -> CameraMatrix {
-        Mat4::identity().into()
-    }
-
-    fn get_projection_matrix(&self) -> CameraMatrix {
-        glm::perspective(
-            // aspect ratio
-            16. / 9.,
-            // fov
-            1.0,
-            // near
-            0.1,
-            // far
-            100_000_000.,
-        )
-        .into()
-    }
-
-    #[allow(unused_variables)]
-    fn handle_input(&mut self, frame_info: FrameInfo) {}
 }
 
 pub fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {

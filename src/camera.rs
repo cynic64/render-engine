@@ -9,6 +9,8 @@ use std::sync::Arc;
 use vulkano::buffer::BufferAccess;
 use vulkano::device::Device;
 
+pub type CameraMatrix = [[f32; 4]; 4];
+
 #[derive(Clone)]
 pub struct OrbitCamera {
     pub center_position: Vec3,
@@ -257,4 +259,27 @@ impl Camera for OrthoCamera {
     }
 
     fn handle_input(&mut self, _frame_info: FrameInfo) {}
+}
+
+pub trait Camera {
+    fn get_view_matrix(&self) -> CameraMatrix {
+        Mat4::identity().into()
+    }
+
+    fn get_projection_matrix(&self) -> CameraMatrix {
+        glm::perspective(
+            // aspect ratio
+            16. / 9.,
+            // fov
+            1.0,
+            // near
+            0.1,
+            // far
+            100_000_000.,
+        )
+            .into()
+    }
+
+    #[allow(unused_variables)]
+    fn handle_input(&mut self, frame_info: FrameInfo) {}
 }

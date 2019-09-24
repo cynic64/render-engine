@@ -222,11 +222,6 @@ impl<'a> System<'a> {
                     .map(|tag| shared_resources.get(tag).expect("missing key").clone())
                     .collect();
 
-                // if let Some(additional_resources) = &object.additional_resources {
-                //     panic!("additional resources are non-functional right now");
-                //     // resources_needed.push(additional_resources.clone());
-                // }
-
                 let resource_set_idx = if images_needed.len() >= 1 {
                     1
                 } else {

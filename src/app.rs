@@ -8,6 +8,9 @@ use crate::template_systems;
 use crate::world::*;
 use crate::producer::ProducerCollection;
 
+pub const CURSOR_RESET_POS_X: u32 = 50;
+pub const CURSOR_RESET_POS_Y: u32 = 50;
+
 pub struct App<'a> {
     events_handler: EventHandler,
     device: Arc<Device>,
