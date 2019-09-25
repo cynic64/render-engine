@@ -186,6 +186,7 @@ impl<'a> System<'a> {
         )
         .unwrap();
 
+        // TODO: rename to pass_idx and restructure some of this
         for (idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[idx].clone();
 
@@ -227,6 +228,7 @@ impl<'a> System<'a> {
                 } else {
                     0
                 };
+
                 let image_set =
                     pds_for_images(self.sampler.clone(), object.pipeline.clone(), images_needed);
                 let resource_set = pds_for_resources(object.pipeline.clone(), resources_needed, resource_set_idx);
