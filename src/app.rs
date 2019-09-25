@@ -111,9 +111,9 @@ impl<'a> App<'a> {
         // TODO: make it so it can figure out which pass belongs to the world
         // and which belongs to the window
         let render_pass = system.get_passes()[0].get_render_pass();
-        self.vk_window.update_render_pass(render_pass.clone());
+        self.vk_window.set_render_pass(render_pass.clone());
         self.vk_window.rebuild();
-        self.world.update_render_pass(render_pass.clone());
+        self.world.set_render_pass(render_pass.clone());
         self.system = system;
     }
 

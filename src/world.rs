@@ -14,7 +14,6 @@ use crate::shaders::*;
 use crate::system::{Vertex, RenderableObject};
 
 // the world stores objects and can produce a list of renderable objects
-// TODO: switch from String to &str
 pub struct World {
     objects: HashMap<String, (ObjectSpec, RenderableObject)>,
     // we need to use an option to get around the borrow checker later
@@ -85,13 +84,11 @@ impl World {
         }
     }
 
-    // TODO: make naming more consistent throughout the crate.
-    // should it be set or update?
-    pub fn update_render_pass(
+    pub fn set_render_pass(
         &mut self,
-        new_renderpass: Arc<dyn RenderPassAbstract + Send + Sync>,
+        new_render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     ) {
-        self.render_pass = new_renderpass;
+        self.render_pass = new_render_pass;
     }
 
     pub fn get_communicator(&self) -> WorldCommunicator {
@@ -132,8 +129,8 @@ impl World {
             .collect()
     }
 
-    pub fn delete_object(&mut self, id: String) {
-        self.objects.remove(&id);
+    pub fn delete_object(&mut self, id: &str) {
+        self.objects.remove(id);
     }
 
     pub fn update(&mut self) {
@@ -145,7 +142,7 @@ impl World {
 
         command_recv.try_iter().for_each(|command| match command {
             Command::AddObjectFromSpec { id, spec } => self.add_object_from_spec(id, spec),
-            Command::DeleteObject { id } => self.delete_object(id),
+            Command::DeleteObject { id } => self.delete_object(&id),
         });
 
         self.command_recv = Some(command_recv);
@@ -159,14 +156,14 @@ impl WorldCommunicator {
         }
     }
 
-    pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
-        let command = Command::AddObjectFromSpec { id, spec };
+    pub fn add_object_from_spec(&mut self, id: &str, spec: ObjectSpec) {
+        let command = Command::AddObjectFromSpec { id: id.to_string(), spec };
 
         self.command_send.send(command).unwrap();
     }
 
-    pub fn delete_object(&mut self, id: String) {
-        let command = Command::DeleteObject { id };
+    pub fn delete_object(&mut self, id: &str) {
+        let command = Command::DeleteObject { id: id.to_string() };
 
         self.command_send.send(command).unwrap();
     }
