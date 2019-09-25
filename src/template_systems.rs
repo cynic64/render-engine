@@ -28,9 +28,9 @@ pub fn forward<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollection) {
 
     // create producers
     let camera = OrbitCamera::default();
-    // camera implements ResourceProducer
+    // camera implements BufferProducer
     let producer = Box::new(camera);
-    let producer_collection = ProducerCollection::new(vec![producer]);
+    let producer_collection = ProducerCollection::new(vec![], vec![producer]);
 
     (system, producer_collection)
 }
@@ -54,9 +54,9 @@ pub fn forward_with_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
     // TODO: hopefully the duplication of all this stuff will be improved by a
     // more flexible system-templating system
     let camera = OrbitCamera::default();
-    // camera implements ResourceProducer
+    // camera implements BufferProducer
     let producer = Box::new(camera);
-    let producer_collection = ProducerCollection::new(vec![producer]);
+    let producer_collection = ProducerCollection::new(vec![], vec![producer]);
 
     (system, producer_collection)
 }
@@ -83,9 +83,9 @@ pub fn forward_msaa_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
 
     // create producers
     let camera = OrbitCamera::default();
-    // camera implements ResourceProducer
+    // camera implements BufferProducer
     let producer = Box::new(camera);
-    let producer_collection = ProducerCollection::new(vec![producer]);
+    let producer_collection = ProducerCollection::new(vec![], vec![producer]);
 
     (system, producer_collection)
 }

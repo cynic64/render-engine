@@ -6,6 +6,7 @@ use std::sync::Arc;
 use nalgebra_glm::*;
 
 use crate::input::*;
+use crate::producer::BufferProducer;
 
 #[derive(Clone)]
 pub struct OrbitCamera {
@@ -59,8 +60,7 @@ impl OrbitCamera {
     }
 }
 
-use crate::producer::ResourceProducer;
-impl ResourceProducer for OrbitCamera {
+impl BufferProducer for OrbitCamera {
     fn update(&mut self, frame_info: FrameInfo) {
         // TODO: a lot of the stuff stored in OrbitCamera doesn't need to be
         // stored across frames

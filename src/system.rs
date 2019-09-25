@@ -175,6 +175,11 @@ impl<'a> System<'a> {
             framebuffers.push(framebuffer);
         }
 
+        // add all images not produced by passes
+        for (image_tag, image) in shared_resources.images.iter() {
+            images.insert(image_tag, image.clone());
+        }
+
         // create the command buffer
         let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
             self.device.clone(),
@@ -216,9 +221,17 @@ impl<'a> System<'a> {
                 let resources_needed: Vec<_> = pass
                     .get_resources_needed()
                     .iter()
-                    .map(|tag| shared_resources.get(tag).expect("missing key").clone())
+                    .map(|tag| {
+                        shared_resources
+                            .buffers
+                            .get(tag)
+                            .expect("missing key")
+                            .clone()
+                    })
                     .collect();
 
+                // TODO: duuuuude this kinda stuff needs documentation, this
+                // whole file needs a good cleaning
                 let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
 
                 let image_set =
