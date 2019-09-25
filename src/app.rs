@@ -1,17 +1,17 @@
-use vulkano::device::{Device, Queue, DeviceExtensions};
-use vulkano::command_buffer::{AutoCommandBuffer};
-use vulkano::instance::{PhysicalDevice, Instance};
+use vulkano::command_buffer::AutoCommandBuffer;
+use vulkano::device::{Device, DeviceExtensions, Queue};
+use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::swapchain::Surface;
 
 use vulkano_win::VkSurfaceBuild;
 
-use winit::{WindowBuilder, EventsLoop, Window};
+use winit::{EventsLoop, Window, WindowBuilder};
 
 use crate::input::*;
+use crate::producer::ProducerCollection;
 use crate::system::System;
 use crate::template_systems;
 use crate::world::*;
-use crate::producer::ProducerCollection;
 
 use re_ll as ll;
 
@@ -132,7 +132,8 @@ impl<'a> App<'a> {
     }
 
     fn handle_input(&mut self) {
-        self.producers.update(self.events_handler.frame_info.clone());
+        self.producers
+            .update(self.events_handler.frame_info.clone());
     }
 
     pub fn print_fps(&self) {

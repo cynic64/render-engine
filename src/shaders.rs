@@ -1,10 +1,12 @@
 extern crate shade_runner;
 extern crate vulkano;
 
-use vulkano::pipeline::shader::ShaderModule;
+use shade_runner::{
+    load, parse, Entry, FragInput, FragLayout, FragOutput, VertInput, VertLayout, VertOutput,
+};
 use vulkano::device::Device;
-use shade_runner::{Entry, load, parse, VertInput, VertOutput, VertLayout, FragInput, FragOutput, FragLayout};
-use vulkano::pipeline::shader::{GraphicsEntryPoint};
+use vulkano::pipeline::shader::GraphicsEntryPoint;
+use vulkano::pipeline::shader::ShaderModule;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -26,15 +28,11 @@ impl ShaderSystem {
         let shaders = load(vs_path, fs_path).expect("Couldn't load shaders");
         let entry = parse(&shaders).expect("Couldn't parse shaders");
 
-        let vs_module = unsafe {
-            ShaderModule::from_words(device.clone(), &shaders.vertex)
-        }
-        .unwrap();
+        let vs_module =
+            unsafe { ShaderModule::from_words(device.clone(), &shaders.vertex) }.unwrap();
 
-        let fs_module = unsafe {
-            ShaderModule::from_words(device.clone(), &shaders.fragment)
-        }
-        .unwrap();
+        let fs_module =
+            unsafe { ShaderModule::from_words(device.clone(), &shaders.fragment) }.unwrap();
 
         let vs = Shader {
             module: vs_module,
@@ -46,10 +44,7 @@ impl ShaderSystem {
             entry: entry.clone(),
         };
 
-        Self {
-            vs,
-            fs,
-        }
+        Self { vs, fs }
     }
 
     pub fn get_entry_points(&self) -> (VertEntry, FragEntry) {

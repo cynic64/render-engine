@@ -88,7 +88,12 @@ pub fn load_obj(path: &Path) -> Result<Vec<Vertex>, Error> {
         }
     }
 
-    println!("loaded obj: {} verts, {} normals, {} faces", vertices.len(), normals.len(), faces.len());
+    println!(
+        "loaded obj: {} verts, {} normals, {} faces",
+        vertices.len(),
+        normals.len(),
+        faces.len()
+    );
 
     Ok(faces
         .iter()
@@ -111,10 +116,7 @@ pub fn load_obj(path: &Path) -> Result<Vec<Vertex>, Error> {
         .collect())
 }
 
-pub fn create_vertices_for_cube(
-    center_position: [f32; 3],
-    radius: f32,
-) -> Vec<Vertex> {
+pub fn create_vertices_for_cube(center_position: [f32; 3], radius: f32) -> Vec<Vertex> {
     CUBE_VERTICES
         .iter()
         .map(|vertex| Vertex {
@@ -128,10 +130,7 @@ pub fn create_vertices_for_cube(
         .collect()
 }
 
-pub fn create_vertices_for_cube_edges(
-    center_position: [f32; 3],
-    radius: f32,
-) -> Vec<Vertex> {
+pub fn create_vertices_for_cube_edges(center_position: [f32; 3], radius: f32) -> Vec<Vertex> {
     CUBE_EDGE_VERTICES
         .iter()
         .map(|vertex| Vertex {
@@ -145,10 +144,7 @@ pub fn create_vertices_for_cube_edges(
         .collect()
 }
 
-pub fn create_vertices_for_sphere(
-    center_position: [f32; 3],
-    radius: f32,
-) -> Vec<Vertex> {
+pub fn create_vertices_for_sphere(center_position: [f32; 3], radius: f32) -> Vec<Vertex> {
     SPHERE_VERTICES
         .iter()
         .map(|vertex| Vertex {

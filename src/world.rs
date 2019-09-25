@@ -1,17 +1,17 @@
-use vulkano::framebuffer::{RenderPassAbstract, Subpass};
+use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::device::Device;
-use vulkano::pipeline::GraphicsPipeline;
+use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::input_assembly::PrimitiveTopology;
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, BufferAccess};
+use vulkano::pipeline::GraphicsPipeline;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 use crate::mesh_gen;
 use crate::shaders::*;
-use crate::system::{Vertex, RenderableObject};
+use crate::system::{RenderableObject, Vertex};
 
 // the world stores objects and can produce a list of renderable objects
 pub struct World {
@@ -84,10 +84,7 @@ impl World {
         }
     }
 
-    pub fn set_render_pass(
-        &mut self,
-        new_render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-    ) {
+    pub fn set_render_pass(&mut self, new_render_pass: Arc<dyn RenderPassAbstract + Send + Sync>) {
         self.render_pass = new_render_pass;
     }
 
@@ -157,7 +154,10 @@ impl WorldCommunicator {
     }
 
     pub fn add_object_from_spec(&mut self, id: &str, spec: ObjectSpec) {
-        let command = Command::AddObjectFromSpec { id: id.to_string(), spec };
+        let command = Command::AddObjectFromSpec {
+            id: id.to_string(),
+            spec,
+        };
 
         self.command_send.send(command).unwrap();
     }
@@ -228,16 +228,10 @@ impl ObjectSpecBuilder {
         let material = Material { fill_type, shaders };
 
         // if no mesh is provided, load a cube
-        let mesh = self.custom_mesh.unwrap_or_else(|| {
-            Box::new(mesh_gen::create_vertices_for_cube(
-                [0.0, 0.0, 0.0],
-                1.0,
-            ))
-        });
+        let mesh = self
+            .custom_mesh
+            .unwrap_or_else(|| Box::new(mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0)));
 
-        ObjectSpec {
-            mesh,
-            material,
-        }
+        ObjectSpec { mesh, material }
     }
 }

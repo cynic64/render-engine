@@ -14,8 +14,8 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::render_passes;
 use crate::producer::SharedResources;
+use crate::render_passes;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -80,11 +80,7 @@ pub struct SimplePass<'a> {
 }
 
 impl<'a> System<'a> {
-    pub fn new(
-        queue: Arc<Queue>,
-        passes: Vec<Box<dyn Pass>>,
-        output_tag: &'a str,
-    ) -> Self {
+    pub fn new(queue: Arc<Queue>, passes: Vec<Box<dyn Pass>>, output_tag: &'a str) -> Self {
         let device = queue.device().clone();
 
         let sampler = Sampler::new(
@@ -223,15 +219,12 @@ impl<'a> System<'a> {
                     .map(|tag| shared_resources.get(tag).expect("missing key").clone())
                     .collect();
 
-                let resource_set_idx = if images_needed.len() >= 1 {
-                    1
-                } else {
-                    0
-                };
+                let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
 
                 let image_set =
                     pds_for_images(self.sampler.clone(), object.pipeline.clone(), images_needed);
-                let resource_set = pds_for_resources(object.pipeline.clone(), resources_needed, resource_set_idx);
+                let resource_set =
+                    pds_for_resources(object.pipeline.clone(), resources_needed, resource_set_idx);
                 let sets_collection = match (image_set, resource_set) {
                     (None, None) => vec![],
                     (Some(real_image_set), None) => vec![real_image_set.clone()],

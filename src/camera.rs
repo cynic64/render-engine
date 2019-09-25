@@ -274,7 +274,7 @@ pub trait Camera {
             // far
             100_000_000.,
         )
-            .into()
+        .into()
     }
 
     #[allow(unused_variables)]

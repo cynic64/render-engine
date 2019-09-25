@@ -1,10 +1,10 @@
-use vulkano::device::Device;
 use vulkano::buffer::BufferAccess;
+use vulkano::device::Device;
 
 use crate::input::FrameInfo;
 
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 // trait for data that needs to be passed to the shaders that changes every
 // frame. not to be used for specific objects.
@@ -25,9 +25,7 @@ pub struct ProducerCollection {
 
 impl ProducerCollection {
     pub fn new(producers: Vec<Box<dyn ResourceProducer>>) -> Self {
-        Self {
-            producers,
-        }
+        Self { producers }
     }
 
     pub fn set_producers(&mut self, new_producers: Vec<Box<dyn ResourceProducer>>) {
@@ -35,7 +33,9 @@ impl ProducerCollection {
     }
 
     pub fn update(&mut self, frame_info: FrameInfo) {
-        self.producers.iter_mut().for_each(|prod| prod.update(frame_info.clone()));
+        self.producers
+            .iter_mut()
+            .for_each(|prod| prod.update(frame_info.clone()));
     }
 
     pub fn get_shared_resources(&self, device: Arc<Device>) -> SharedResources {
