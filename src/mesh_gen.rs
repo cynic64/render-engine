@@ -148,7 +148,6 @@ pub fn create_vertices_for_cube_edges(
 pub fn create_vertices_for_sphere(
     center_position: [f32; 3],
     radius: f32,
-    color: [f32; 3],
 ) -> Vec<Vertex> {
     SPHERE_VERTICES
         .iter()
