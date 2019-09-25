@@ -1,5 +1,3 @@
-extern crate vulkano;
-
 use vulkano::device::Device;
 use vulkano::format::{ClearValue, Format};
 use vulkano::framebuffer::{LoadOp, RenderPassAbstract, RenderPassDesc};

@@ -1,10 +1,10 @@
 use vulkano::buffer::BufferAccess;
 use vulkano::device::Device;
 
-use crate::input::FrameInfo;
-
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use crate::input::FrameInfo;
 
 // trait for data that needs to be passed to the shaders that changes every
 // frame. not to be used for specific objects.

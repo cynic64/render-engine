@@ -1,12 +1,11 @@
-extern crate nalgebra_glm as glm;
-
-use self::glm::*;
-
-use crate::input::*;
-
-use std::sync::Arc;
 use vulkano::buffer::BufferAccess;
 use vulkano::device::Device;
+
+use std::sync::Arc;
+
+use nalgebra_glm::*;
+
+use crate::input::*;
 
 #[derive(Clone)]
 pub struct OrbitCamera {
@@ -40,8 +39,8 @@ impl OrbitCamera {
         let mouse_sens = 0.0007;
         let orbit_distance = 4.0;
 
-        let view_mat: CameraMatrix = glm::Mat4::identity().into();
-        let proj_mat: CameraMatrix = glm::Mat4::identity().into();
+        let view_mat: CameraMatrix = Mat4::identity().into();
+        let proj_mat: CameraMatrix = Mat4::identity().into();
 
         Self {
             center_position,
@@ -86,7 +85,7 @@ impl ResourceProducer for OrbitCamera {
             self.pitch.cos() * self.yaw.sin(),
         ));
 
-        self.right = normalize(&glm::Vec3::cross(&self.front, &self.world_up));
+        self.right = normalize(&Vec3::cross(&self.front, &self.world_up));
 
         // recompute view and projection matrices
         let farther_front = self.front * self.orbit_distance;
@@ -99,7 +98,7 @@ impl ResourceProducer for OrbitCamera {
 
         let dims = frame_info.dimensions;
         let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
-        self.proj_mat = glm::perspective(
+        self.proj_mat = perspective(
             aspect_ratio,
             // fov
             1.0,
@@ -200,7 +199,7 @@ impl FlyCamera {
             self.pitch.cos() * self.yaw.sin(),
         ));
 
-        self.right = normalize(&glm::Vec3::cross(&self.front, &self.world_up));
+        self.right = normalize(&Vec3::cross(&self.front, &self.world_up));
     }
 }
 
@@ -264,7 +263,7 @@ pub trait Camera {
     }
 
     fn get_projection_matrix(&self) -> CameraMatrix {
-        glm::perspective(
+        perspective(
             // aspect ratio
             16. / 9.,
             // fov

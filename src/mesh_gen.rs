@@ -1,9 +1,9 @@
 // TODO: maybe define vertex here instead of in system?
-use crate::system::Vertex;
-
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error};
 use std::path::Path;
+
+use crate::system::Vertex;
 
 #[rustfmt::skip]
 //                                                          0              1                 2                    3                   4                   5                   6                   7

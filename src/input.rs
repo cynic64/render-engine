@@ -1,5 +1,5 @@
-use std::time::Instant;
 use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowEvent};
+use std::time::Instant;
 
 // handles all the events.
 // you can clone it around as much as you want cause it's small

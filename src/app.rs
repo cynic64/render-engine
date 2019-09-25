@@ -7,15 +7,15 @@ use vulkano_win::VkSurfaceBuild;
 
 use winit::{EventsLoop, Window, WindowBuilder};
 
+use std::sync::Arc;
+
+use re_ll as ll;
+
 use crate::input::*;
 use crate::producer::ProducerCollection;
 use crate::system::System;
 use crate::template_systems;
 use crate::world::*;
-
-use re_ll as ll;
-
-use std::sync::Arc;
 
 pub struct App<'a> {
     events_handler: EventHandler,

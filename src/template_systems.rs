@@ -1,11 +1,11 @@
 use vulkano::device::Queue;
 
+use std::sync::Arc;
+
 use crate::camera::OrbitCamera;
 use crate::producer::ProducerCollection;
 use crate::render_passes;
 use crate::system::{ComplexPass, System};
-
-use std::sync::Arc;
 
 // TODO: shaders should be chosen here, because then everything is stored in one
 // place and pieces becoming invalid is less likely

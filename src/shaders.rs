@@ -1,12 +1,10 @@
-extern crate shade_runner;
-extern crate vulkano;
+use vulkano::device::Device;
+use vulkano::pipeline::shader::GraphicsEntryPoint;
+use vulkano::pipeline::shader::ShaderModule;
 
 use shade_runner::{
     load, parse, Entry, FragInput, FragLayout, FragOutput, VertInput, VertLayout, VertOutput,
 };
-use vulkano::device::Device;
-use vulkano::pipeline::shader::GraphicsEntryPoint;
-use vulkano::pipeline::shader::ShaderModule;
 
 use std::path::Path;
 use std::sync::Arc;
