@@ -116,6 +116,7 @@ pub fn load_obj(path: &Path) -> Result<Vec<Vertex>, Error> {
         .collect())
 }
 
+// TODO: get rid of center_position and radius because you can do the same with model matrices
 pub fn create_vertices_for_cube(center_position: [f32; 3], radius: f32) -> Vec<Vertex> {
     CUBE_VERTICES
         .iter()

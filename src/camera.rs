@@ -23,6 +23,7 @@ pub struct OrbitCamera {
     proj_mat: CameraMatrix,
 }
 
+// TODO: builders for changing fov, perspective, orbit dist, etc.
 impl OrbitCamera {
     pub fn default() -> Self {
         let center_position = vec3(0.0, 0.0, 0.0);

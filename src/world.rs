@@ -1,7 +1,7 @@
 use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::device::Device;
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
-use vulkano::pipeline::input_assembly::PrimitiveTopology;
+pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 use vulkano::pipeline::GraphicsPipeline;
 
 use std::collections::HashMap;
@@ -201,6 +201,13 @@ impl ObjectSpecBuilder {
     pub fn shaders(self, shaders: ShaderSystem) -> Self {
         Self {
             custom_shaders: Some(shaders),
+            ..self
+        }
+    }
+
+    pub fn fill_type(self, fill_type: PrimitiveTopology) -> Self {
+        Self {
+            custom_fill_type: Some(fill_type),
             ..self
         }
     }

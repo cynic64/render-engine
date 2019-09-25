@@ -176,7 +176,7 @@ impl<'a> App<'a> {
         let shared_resources = self.producers.get_shared_resources(self.device.clone());
 
         let frame_fut = self.system.draw_frame(
-            self.vk_window.get_dimensions(),
+            swapchain_image.dimensions(),
             all_renderable_objects,
             shared_resources,
             swapchain_image,
