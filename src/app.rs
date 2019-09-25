@@ -136,6 +136,10 @@ impl<'a> App<'a> {
             .update(self.events_handler.frame_info.clone());
     }
 
+    pub fn get_frame_info(&mut self) -> FrameInfo {
+        self.events_handler.frame_info.clone()
+    }
+
     pub fn print_fps(&self) {
         let fps = self.events_handler.get_fps();
         println!("FPS: {}", fps);

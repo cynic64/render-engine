@@ -1,4 +1,4 @@
-use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowEvent};
+pub use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowEvent};
 use std::time::Instant;
 
 // handles all the events.

@@ -27,3 +27,5 @@ pub use world::WorldCommunicator;
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 
 pub mod mesh_gen;
+
+pub use vulkano::impl_vertex;
