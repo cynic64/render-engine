@@ -1,20 +1,17 @@
-use crate::internal_tools::*;
-use crate::mesh_gen;
-use crate::shaders::*;
-
-use crate::system::Vertex;
+use vulkano::framebuffer::{RenderPassAbstract, Subpass};
+use vulkano::device::Device;
+use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::input_assembly::PrimitiveTopology;
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, BufferAccess};
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::Arc;
 
-use crate::system::RenderableObject;
-
-use vulkano::buffer::BufferAccess;
-pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
-
-extern crate nalgebra_glm as glm;
+use crate::mesh_gen;
+use crate::shaders::*;
+use crate::system::{Vertex, RenderableObject};
 
 // the world stores objects and can produce a list of renderable objects
 // TODO: switch from String to &str
@@ -77,7 +74,7 @@ impl World {
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
         device: Arc<Device>,
     ) -> Self {
-        let (sender, receiver): (Sender<Command>, Receiver<Command>) = mpsc::channel();
+        let (sender, receiver): (Sender<Command>, Receiver<Command>) = channel();
 
         Self {
             objects: HashMap::new(),
