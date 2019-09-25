@@ -1,4 +1,3 @@
-use crate::exposed_tools::{get_elapsed, winit_event_to_keycode};
 use std::time::Instant;
 use winit::{Event, EventsLoop, KeyboardInput, VirtualKeyCode, WindowEvent};
 
@@ -258,5 +257,26 @@ impl KeysDown {
             y: false,
             z: false,
         }
+    }
+}
+
+fn get_elapsed(start: std::time::Instant) -> f32 {
+    start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0
+}
+
+fn winit_event_to_keycode(event: &Event) -> Option<winit::KeyboardInput> {
+    // only matches key press/release events
+    if let Event::WindowEvent {
+        event: WindowEvent::KeyboardInput { input, .. },
+        ..
+    } = event
+    {
+        if input.virtual_keycode.is_some() {
+            Some(*input)
+        } else {
+            None
+        }
+    } else {
+        None
     }
 }

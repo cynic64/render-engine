@@ -1,6 +1,3 @@
-pub mod exposed_tools;
-pub use exposed_tools::*;
-
 pub mod system;
 
 pub mod app;
@@ -10,7 +7,7 @@ pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
 
 pub mod template_systems;
 
-// TODO: organize this whole file better and get rid of exposed_tools
+// TODO: organize this whole file better
 pub mod producer;
 
 pub mod input;
@@ -32,5 +29,3 @@ pub mod mesh_gen;
 mod internal_tools;
 
 pub use re_ll as ll;
-
-vulkano::impl_vertex!(Vertex, position, normal);

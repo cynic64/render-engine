@@ -1,8 +1,8 @@
-use crate::exposed_tools::*;
-use crate::input::*;
 use crate::internal_tools::*;
 use crate::mesh_gen;
 use crate::shaders::*;
+
+use crate::system::Vertex;
 
 use std::collections::HashMap;
 use std::path::Path;

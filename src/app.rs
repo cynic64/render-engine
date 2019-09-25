@@ -1,15 +1,9 @@
-extern crate nalgebra_glm as glm;
-
-use crate::exposed_tools::*;
 use crate::input::*;
 use crate::internal_tools::*;
 use crate::system::System;
 use crate::template_systems;
 use crate::world::*;
 use crate::producer::ProducerCollection;
-
-pub const CURSOR_RESET_POS_X: u32 = 50;
-pub const CURSOR_RESET_POS_Y: u32 = 50;
 
 pub struct App<'a> {
     events_handler: EventHandler,
@@ -22,12 +16,6 @@ pub struct App<'a> {
     system: System<'a>,
     producers: ProducerCollection,
 }
-
-#[derive(Default, Copy, Clone)]
-struct SimpleVertex {
-    position: [f32; 2],
-}
-vulkano::impl_vertex!(SimpleVertex, position);
 
 impl<'a> App<'a> {
     pub fn new() -> Self {

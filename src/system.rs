@@ -518,3 +518,11 @@ pub struct SimpleVertex {
     position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex, position);
+
+// TODO: maybe rename to vertex3D?
+#[derive(Default, Debug, Clone)]
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+}
+vulkano::impl_vertex!(Vertex, position, normal);

@@ -2,14 +2,11 @@ extern crate nalgebra_glm as glm;
 
 use self::glm::*;
 
-use crate::exposed_tools::*;
 use crate::input::*;
 
 use std::sync::Arc;
 use vulkano::buffer::BufferAccess;
 use vulkano::device::Device;
-
-pub type CameraMatrix = [[f32; 4]; 4];
 
 #[derive(Clone)]
 pub struct OrbitCamera {
@@ -282,4 +279,13 @@ pub trait Camera {
 
     #[allow(unused_variables)]
     fn handle_input(&mut self, frame_info: FrameInfo) {}
+}
+
+pub type CameraMatrix = [[f32; 4]; 4];
+
+#[derive(Clone, Debug)]
+pub struct MVP {
+    pub model: CameraMatrix,
+    pub view: CameraMatrix,
+    pub proj: CameraMatrix,
 }

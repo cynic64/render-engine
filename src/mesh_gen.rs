@@ -1,4 +1,5 @@
-use crate::exposed_tools::*;
+// TODO: maybe define vertex here instead of in system?
+use crate::system::Vertex;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error};
