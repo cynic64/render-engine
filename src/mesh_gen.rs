@@ -78,12 +78,12 @@ pub fn load_obj(path: &Path) -> Result<Mesh, Error> {
             let piece1 = pieces[1].split("/").collect::<Vec<_>>();
             let piece2 = pieces[2].split("/").collect::<Vec<_>>();
             let piece3 = pieces[3].split("/").collect::<Vec<_>>();
-            let v1: usize = piece1[0].parse().unwrap();
-            let v2: usize = piece2[0].parse().unwrap();
-            let v3: usize = piece3[0].parse().unwrap();
-            let n1: usize = piece1[2].parse().unwrap();
-            let n2: usize = piece2[2].parse().unwrap();
-            let n3: usize = piece3[2].parse().unwrap();
+            let v1: u32 = piece1[0].parse().unwrap();
+            let v2: u32 = piece2[0].parse().unwrap();
+            let v3: u32 = piece3[0].parse().unwrap();
+            let n1: u32 = piece1[2].parse().unwrap();
+            let n2: u32 = piece2[2].parse().unwrap();
+            let n3: u32 = piece3[2].parse().unwrap();
 
             faces.push((v1, v2, v3, n1, n2, n3));
         }
@@ -96,30 +96,28 @@ pub fn load_obj(path: &Path) -> Result<Mesh, Error> {
         faces.len()
     );
 
-    let vertices: Vec<Vertex> = faces
-        .iter()
-        .flat_map(|(v1, v2, v3, n1, n2, n3)| {
-            vec![
-                Vertex {
-                    position: vertices[*v1 - 1],
-                    normal: normals[*n1 - 1],
-                },
-                Vertex {
-                    position: vertices[*v2 - 1],
-                    normal: normals[*n2 - 1],
-                },
-                Vertex {
-                    position: vertices[*v3 - 1],
-                    normal: normals[*n3 - 1],
-                },
-            ]
-        })
-        .collect();
-    let indices: Vec<u32> = (0..vertices.len() as u32).collect();
+    // TODO: switch to tobj because i don't want to write shit like this
+    let mut vertices_with_normal_indices = vec![0; vertices.len()];
+    for face in faces.iter() {
+        let (v1, v2, v3, n1, n2, n3) = face;
+
+        for (v_idx, n_idx) in [(v1, n1), (v2, n2), (v3, n3)].iter() {
+            vertices_with_normal_indices[**v_idx as usize - 1] = **n_idx as usize - 1;
+        }
+    }
+
+    let final_vertices: Vec<Vertex> = vertices.iter().enumerate().map(|(idx, v)| Vertex {
+        position: *v,
+        normal: normals[vertices_with_normal_indices[idx]],
+    }).collect();
+
+    let final_indices = faces.iter().flat_map(|(v1, v2, v3, _, _, _)| {
+        vec![*v1 - 1, *v2 - 1, *v3 - 1]
+    }).collect();
 
     Ok(Mesh {
-        vertices: Box::new(vertices),
-        indices,
+        vertices: Box::new(final_vertices),
+        indices: final_indices,
     })
 }
 
