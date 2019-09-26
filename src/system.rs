@@ -31,6 +31,7 @@ pub struct System<'a> {
     sampler: Arc<Sampler>,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
+    simple_ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     output_tag: &'a str,
@@ -98,6 +99,7 @@ impl<'a> System<'a> {
         )
         .unwrap();
 
+        // TODO: move these to another file
         let simple_vbuf = {
             CpuAccessibleBuffer::from_iter(
                 device.clone(),
@@ -122,10 +124,20 @@ impl<'a> System<'a> {
             .unwrap()
         };
 
+        let simple_ibuf = {
+            CpuAccessibleBuffer::from_iter(
+                device.clone(),
+                BufferUsage::all(),
+                [0, 1, 2, 3].iter().cloned(),
+            )
+            .unwrap()
+        };
+
         Self {
             passes,
             sampler,
             simple_vbuf,
+            simple_ibuf,
             device,
             queue,
             output_tag,
@@ -205,6 +217,7 @@ impl<'a> System<'a> {
                 vec![RenderableObject {
                     pipeline: pass.get_pipeline(),
                     vbuf: self.simple_vbuf.clone(),
+                    ibuf: self.simple_ibuf.clone(),
                     additional_resources: None,
                 }]
             };
@@ -248,10 +261,11 @@ impl<'a> System<'a> {
                 };
 
                 cmd_buf_builder = cmd_buf_builder
-                    .draw(
+                    .draw_indexed(
                         object.pipeline.clone(),
                         &dynamic_state,
                         vec![object.vbuf.clone()],
+                        object.ibuf.clone(),
                         sets_collection,
                         (),
                     )
@@ -279,6 +293,7 @@ impl<'a> System<'a> {
 pub struct RenderableObject {
     pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
+    pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
     pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
 }
 

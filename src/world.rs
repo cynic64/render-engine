@@ -44,15 +44,20 @@ pub enum Command {
 // halfway-complete builders
 // it's useful, i swear!
 pub struct ObjectSpec {
-    mesh: Box<dyn Mesh>,
+    mesh: Mesh,
     material: Material,
 }
 
-pub trait Mesh {
+pub struct Mesh {
+    pub vertices: Box<dyn Vertices>,
+    pub indices: Vec<u32>,
+}
+
+pub trait Vertices {
     fn create_vbuf(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync>;
 }
 
-impl<V> Mesh for Vec<V>
+impl<V> Vertices for Vec<V>
 where
     V: vulkano::memory::Content + Send + Sync + Clone + 'static,
 {
@@ -93,7 +98,14 @@ impl World {
     }
 
     pub fn add_object_from_spec(&mut self, id: String, spec: ObjectSpec) {
-        let vbuf = spec.mesh.create_vbuf(self.device.clone());
+        let vbuf = spec.mesh.vertices.create_vbuf(self.device.clone());
+        // TODO: make a function for this
+        let ibuf = CpuAccessibleBuffer::from_iter(
+            self.device.clone(),
+            BufferUsage::all(),
+            spec.mesh.indices.iter().cloned(),
+        )
+        .unwrap();
 
         let (vs_main, fs_main) = spec.material.shaders.get_entry_points();
 
@@ -113,6 +125,7 @@ impl World {
         let object = RenderableObject {
             pipeline,
             vbuf,
+            ibuf,
             additional_resources: None,
         };
 
@@ -177,7 +190,7 @@ where
 }
 
 pub struct ObjectSpecBuilder {
-    custom_mesh: Option<Box<dyn Mesh>>,
+    custom_mesh: Option<Mesh>,
     custom_fill_type: Option<PrimitiveTopology>,
     custom_shaders: Option<ShaderSystem>,
 }
@@ -191,9 +204,9 @@ impl ObjectSpecBuilder {
         }
     }
 
-    pub fn mesh<M: Mesh + 'static>(self, mesh: M) -> Self {
+    pub fn mesh(self, mesh: Mesh) -> Self {
         Self {
-            custom_mesh: Some(Box::new(mesh)),
+            custom_mesh: Some(mesh),
             ..self
         }
     }
@@ -237,7 +250,7 @@ impl ObjectSpecBuilder {
         // if no mesh is provided, load a cube
         let mesh = self
             .custom_mesh
-            .unwrap_or_else(|| Box::new(mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0)));
+            .unwrap_or_else(|| mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0));
 
         ObjectSpec { mesh, material }
     }
