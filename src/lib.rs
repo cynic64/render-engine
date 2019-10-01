@@ -12,7 +12,7 @@ pub mod template_systems;
 // TODO: organize this whole file better
 pub mod producer;
 
-// pub mod pipeline_cache;
+pub mod pipeline_cache;
 
 pub mod input;
 

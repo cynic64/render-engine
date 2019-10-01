@@ -1,17 +1,17 @@
 use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::device::Device;
-use vulkano::framebuffer::{RenderPassAbstract, Subpass};
+use vulkano::framebuffer::RenderPassAbstract;
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
-use vulkano::pipeline::GraphicsPipeline;
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 use crate::mesh_gen;
-use crate::shaders::*;
-use crate::system::{RenderableObject, Vertex};
+use crate::shaders::relative_path;
+use crate::system::RenderableObject;
+use crate::pipeline_cache::PipelineSpec;
 
 // the world stores objects and can produce a list of renderable objects
 pub struct World {
@@ -45,7 +45,7 @@ pub enum Command {
 // it's useful, i swear!
 pub struct ObjectSpec {
     mesh: Mesh,
-    material: Material,
+    pipeline_spec: PipelineSpec,
 }
 
 pub struct Mesh {
@@ -64,13 +64,6 @@ where
     fn create_vbuf(&self, device: Arc<Device>) -> Arc<dyn BufferAccess + Send + Sync> {
         vbuf_from_vec(device, &self)
     }
-}
-
-// will eventually contain a shader and all other info the pipeline needs
-// maybe a MaterialSpec would be useful too, cause it wouldn't require a vulkan instance... idk
-struct Material {
-    pub fill_type: PrimitiveTopology,
-    pub shaders: ShaderSystem,
 }
 
 impl World {
@@ -107,23 +100,8 @@ impl World {
         )
         .unwrap();
 
-        let (vs_main, fs_main) = spec.material.shaders.get_entry_points();
-
-        let pipeline = Arc::new(
-            GraphicsPipeline::start()
-                .vertex_input_single_buffer::<Vertex>()
-                .vertex_shader(vs_main, ())
-                .primitive_topology(spec.material.fill_type)
-                .viewports_dynamic_scissors_irrelevant(1)
-                .fragment_shader(fs_main, ())
-                .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
-                .depth_stencil_simple_depth()
-                .build(self.device.clone())
-                .unwrap(),
-        );
-
         let object = RenderableObject {
-            pipeline,
+            pipeline_spec: spec.pipeline_spec.clone(),
             vbuf,
             ibuf,
         };
@@ -191,7 +169,7 @@ where
 pub struct ObjectSpecBuilder {
     custom_mesh: Option<Mesh>,
     custom_fill_type: Option<PrimitiveTopology>,
-    custom_shaders: Option<ShaderSystem>,
+    custom_shaders: Option<(PathBuf, PathBuf)>,
 }
 
 impl ObjectSpecBuilder {
@@ -210,9 +188,9 @@ impl ObjectSpecBuilder {
         }
     }
 
-    pub fn shaders(self, shaders: ShaderSystem) -> Self {
+    pub fn shaders(self, vs_path: PathBuf, fs_path: PathBuf) -> Self {
         Self {
-            custom_shaders: Some(shaders),
+            custom_shaders: Some((vs_path, fs_path)),
             ..self
         }
     }
@@ -224,33 +202,26 @@ impl ObjectSpecBuilder {
         }
     }
 
-    pub fn build(self, device: Arc<Device>) -> ObjectSpec {
+    pub fn build(self) -> ObjectSpec {
         let fill_type = self
             .custom_fill_type
             .unwrap_or(PrimitiveTopology::TriangleList);
 
         // if you choose to customize shaders, you need to provide both
-        let shaders = self.custom_shaders.unwrap_or_else(|| {
-            let vert_path = Path::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/shaders/forward/default_vert.glsl"
+        let (vs_path, fs_path) = self
+            .custom_shaders
+            .unwrap_or((
+                relative_path("shaders/forward/default_vert.glsl"),
+                relative_path("shaders/forward/default_frag.glsl"),
             ));
 
-            let frag_path = Path::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/shaders/forward/default_frag.glsl"
-            ));
-
-            ShaderSystem::load_from_file(device.clone(), &vert_path, &frag_path)
-        });
-
-        let material = Material { fill_type, shaders };
+        let pipeline_spec = PipelineSpec { fill_type, vs_path, fs_path };
 
         // if no mesh is provided, load a cube
         let mesh = self
             .custom_mesh
             .unwrap_or_else(|| mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0));
 
-        ObjectSpec { mesh, material }
+        ObjectSpec { mesh, pipeline_spec }
     }
 }

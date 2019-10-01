@@ -17,6 +17,7 @@ use std::sync::Arc;
 use crate::mesh_gen;
 use crate::producer::SharedResources;
 use crate::render_passes;
+use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -177,19 +178,22 @@ impl<'a> System<'a> {
             // it's a simple one use a screen-filling vbuf
             match pass {
                 Pass::Complex { .. } => {
+                    let mut pipeline_cache = PipelineCache::new(self.device.clone(), pass.get_render_pass().clone());
                     let pass_objects = objects[pass.name()].clone();
 
                     for object in pass_objects.iter() {
+                        let pipeline = pipeline_cache.get(&object.pipeline_spec);
+
                         let collection = collection_from_resources(
                             self.sampler.clone(),
-                            object.pipeline.clone(),
+                            pipeline.clone(),
                             &images_needed,
                             &buffers_needed,
                         );
 
                         cmd_buf_builder = cmd_buf_builder
                             .draw_indexed(
-                                object.pipeline.clone(),
+                                pipeline,
                                 &dynamic_state,
                                 vec![object.vbuf.clone()],
                                 object.ibuf.clone(),
@@ -239,7 +243,7 @@ impl<'a> System<'a> {
 
 #[derive(Clone)]
 pub struct RenderableObject {
-    pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
 }
