@@ -260,7 +260,7 @@ impl KeysDown {
     }
 }
 
-fn get_elapsed(start: std::time::Instant) -> f32 {
+pub fn get_elapsed(start: std::time::Instant) -> f32 {
     start.elapsed().as_secs() as f32 + start.elapsed().subsec_nanos() as f32 / 1_000_000_000.0
 }
 

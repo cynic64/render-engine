@@ -15,9 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::mesh_gen;
+use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 use crate::producer::SharedResources;
 use crate::render_passes;
-use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -30,6 +30,7 @@ use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 // for it.
 pub struct System<'a> {
     passes: Vec<Pass<'a>>,
+    pipeline_caches: Vec<PipelineCache>,
     sampler: Arc<Sampler>,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
@@ -96,8 +97,11 @@ impl<'a> System<'a> {
 
         let (simple_vbuf, simple_ibuf) = mesh_gen::create_buffers_for_screen_square(device.clone());
 
+        let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
+
         Self {
             passes,
+            pipeline_caches,
             sampler,
             simple_vbuf,
             simple_ibuf,
@@ -178,11 +182,10 @@ impl<'a> System<'a> {
             // it's a simple one use a screen-filling vbuf
             match pass {
                 Pass::Complex { .. } => {
-                    let mut pipeline_cache = PipelineCache::new(self.device.clone(), pass.get_render_pass().clone());
                     let pass_objects = objects[pass.name()].clone();
 
                     for object in pass_objects.iter() {
-                        let pipeline = pipeline_cache.get(&object.pipeline_spec);
+                        let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
                         let collection = collection_from_resources(
                             self.sampler.clone(),
@@ -238,6 +241,14 @@ impl<'a> System<'a> {
 
     pub fn get_passes(&self) -> &[Pass] {
         &self.passes
+    }
+
+    pub fn print_stats(&self) {
+        (0..self.passes.len()).for_each(|idx| {
+            println!("Stats for cache pass {}:", self.passes[idx].name());
+            self.pipeline_caches[idx].print_stats();
+            println!();
+        })
     }
 }
 
@@ -531,6 +542,13 @@ impl<'a> Pass<'a> {
             Pass::Simple { buffers_needed, .. } => buffers_needed,
         }
     }
+}
+
+fn pipe_caches_for_passes(device: Arc<Device>, passes: &[Pass]) -> Vec<PipelineCache> {
+    passes
+        .iter()
+        .map(|pass| PipelineCache::new(device.clone(), pass.get_render_pass()))
+        .collect()
 }
 
 #[derive(Default, Debug, Clone)]

@@ -140,6 +140,7 @@ impl<'a> App<'a> {
     pub fn print_fps(&self) {
         let fps = self.events_handler.get_fps();
         println!("FPS: {}", fps);
+        self.system.print_stats();
     }
 
     pub fn get_device(&self) -> Arc<Device> {
