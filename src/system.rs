@@ -1,6 +1,8 @@
 use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
+use vulkano::descriptor::descriptor_set::{
+    DescriptorSet, PersistentDescriptorSet,
+};
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
@@ -180,8 +182,8 @@ impl<'a> System<'a> {
         .unwrap();
 
         // TODO: rename to pass_idx and restructure some of this
-        for (idx, pass) in self.passes.iter().enumerate() {
-            let framebuffer = framebuffers[idx].clone();
+        for (pass_idx, pass) in self.passes.iter().enumerate() {
+            let framebuffer = framebuffers[pass_idx].clone();
 
             let clear_values = render_passes::clear_values_for_pass(pass.get_render_pass().clone());
 
@@ -192,7 +194,7 @@ impl<'a> System<'a> {
             // TODO: make naming more clear on when it's just the tag and when
             // it's the actual image
             let images_needed: Vec<Arc<dyn ImageViewAccess + Send + Sync>> = pass
-                .get_images_needed()
+                .images_needed_tags()
                 .iter()
                 .map(|tag| {
                     images
@@ -203,7 +205,7 @@ impl<'a> System<'a> {
                 .collect();
 
             let resources_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
-                .get_resources_needed()
+                .resources_needed_tags()
                 .iter()
                 .map(|tag| {
                     shared_resources
@@ -216,31 +218,15 @@ impl<'a> System<'a> {
 
             match pass {
                 Pass::Complex { .. } => {
-                    let pass_objects = objects[idx].clone();
+                    let pass_objects = objects[pass_idx].clone();
 
                     for object in pass_objects.iter() {
-                        // create uniform collection for object
-                        // TODO: move this to its own function
-                        let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
-
-                        let image_set = pds_for_images(
+                        let collection = collection_from_resources(
                             self.sampler.clone(),
                             object.pipeline.clone(),
                             &images_needed,
-                        );
-                        let resource_set = pds_for_resources(
-                            object.pipeline.clone(),
                             &resources_needed,
-                            resource_set_idx,
                         );
-                        let sets_collection = match (image_set, resource_set) {
-                            (None, None) => vec![],
-                            (Some(real_image_set), None) => vec![real_image_set.clone()],
-                            (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
-                            (Some(real_image_set), Some(real_resource_set)) => {
-                                vec![real_image_set.clone(), real_resource_set.clone()]
-                            }
-                        };
 
                         cmd_buf_builder = cmd_buf_builder
                             .draw_indexed(
@@ -248,27 +234,19 @@ impl<'a> System<'a> {
                                 &dynamic_state,
                                 vec![object.vbuf.clone()],
                                 object.ibuf.clone(),
-                                sets_collection,
+                                collection,
                                 (),
                             )
                             .unwrap();
                     }
                 }
                 Pass::Simple { pipeline, .. } => {
-                    let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
-
-                    let image_set =
-                        pds_for_images(self.sampler.clone(), pipeline.clone(), &images_needed);
-                    let resource_set =
-                        pds_for_resources(pipeline.clone(), &resources_needed, resource_set_idx);
-                    let sets_collection = match (image_set, resource_set) {
-                        (None, None) => vec![],
-                        (Some(real_image_set), None) => vec![real_image_set.clone()],
-                        (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
-                        (Some(real_image_set), Some(real_resource_set)) => {
-                            vec![real_image_set.clone(), real_resource_set.clone()]
-                        }
-                    };
+                    let collection = collection_from_resources(
+                        self.sampler.clone(),
+                        pipeline.clone(),
+                        &images_needed,
+                        &resources_needed,
+                    );
 
                     cmd_buf_builder = cmd_buf_builder
                         .draw_indexed(
@@ -276,7 +254,7 @@ impl<'a> System<'a> {
                             &dynamic_state,
                             vec![self.simple_vbuf.clone()],
                             self.simple_ibuf.clone(),
-                            sets_collection,
+                            collection,
                             (),
                         )
                         .unwrap();
@@ -327,6 +305,32 @@ fn dynamic_state_for_dimensions(dimensions: [u32; 2]) -> DynamicState {
         line_width: None,
         viewports: Some(vec![viewport]),
         scissors: None,
+    }
+}
+
+fn collection_from_resources(
+    sampler: Arc<Sampler>,
+    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    images: &[Arc<dyn ImageViewAccess + Send + Sync>],
+    resources: &[Arc<dyn BufferAccess + Send + Sync>],
+) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
+    let resource_set_idx = if images.len() >= 1 { 1 } else { 0 };
+
+    let image_set = pds_for_images(sampler, pipeline.clone(), &images);
+
+    // TODO: maybe rename resources to buffers?
+    let resource_set = pds_for_resources(pipeline.clone(), &resources, resource_set_idx);
+
+    // either no images and no buffers were needed, or images but no buffers, or
+    // buffers but no images, or buffers and images. this handles every case and
+    // converts each into a vector of just the needed resources
+    match (image_set, resource_set) {
+        (None, None) => vec![],
+        (Some(real_image_set), None) => vec![real_image_set.clone()],
+        (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
+        (Some(real_image_set), Some(real_resource_set)) => {
+            vec![real_image_set.clone(), real_resource_set.clone()]
+        }
     }
 }
 
@@ -492,7 +496,7 @@ fn images_for_passes<'a>(
     // that image with the real one afterwards.
     let mut images = HashMap::new();
     for pass in passes.iter() {
-        for (image_idx, &image_tag) in pass.get_images_created().iter().enumerate() {
+        for (image_idx, &image_tag) in pass.images_created_tags().iter().enumerate() {
             let desc = pass
                 .get_render_pass()
                 .attachment_desc(image_idx)
@@ -512,7 +516,7 @@ fn framebuffers_for_passes<'a>(
     let mut framebuffers = vec![];
 
     for pass in passes.iter() {
-        let images_tags_created = pass.get_images_created();
+        let images_tags_created = pass.images_created_tags();
         let images = images_tags_created
             .iter()
             .map(|tag| {
@@ -531,14 +535,14 @@ fn framebuffers_for_passes<'a>(
 }
 
 impl<'a> Pass<'a> {
-    pub fn get_images_created(&self) -> &[&str] {
+    pub fn images_created_tags(&self) -> &[&str] {
         match self {
             Pass::Complex { images_created, .. } => images_created,
             Pass::Simple { images_created, .. } => images_created,
         }
     }
 
-    pub fn get_images_needed(&self) -> &[&str] {
+    pub fn images_needed_tags(&self) -> &[&str] {
         match self {
             Pass::Complex { images_needed, .. } => images_needed,
             Pass::Simple { images_needed, .. } => images_needed,
@@ -552,7 +556,7 @@ impl<'a> Pass<'a> {
         }
     }
 
-    pub fn get_resources_needed(&self) -> &[&str] {
+    pub fn resources_needed_tags(&self) -> &[&str] {
         match self {
             Pass::Complex {
                 resources_needed, ..
