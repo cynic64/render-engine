@@ -126,7 +126,6 @@ impl World {
             pipeline,
             vbuf,
             ibuf,
-            additional_resources: None,
         };
 
         self.objects.insert(id, (spec, object));

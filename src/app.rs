@@ -69,6 +69,7 @@ impl<'a> App<'a> {
 
         // create the system
         let (system, producers) = template_systems::forward_with_depth(queue.clone());
+        // TODO: which render pass does this refer to?
         let render_pass = system.get_passes()[0].get_render_pass().clone();
 
         let world = World::new(render_pass.clone(), device.clone());

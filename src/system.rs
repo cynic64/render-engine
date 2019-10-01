@@ -27,7 +27,7 @@ use crate::render_passes;
 // A system is a list of passes that takes a bunch of data and produces a frame
 // for it.
 pub struct System<'a> {
-    passes: Vec<Box<dyn Pass>>,
+    passes: Vec<Pass<'a>>,
     sampler: Arc<Sampler>,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
@@ -54,34 +54,32 @@ pub struct System<'a> {
 //
 // When used in a system, the system will create all the necessary images first,
 //   and add the needed images to a uniform buffer
-//   'mvp' is a special kind of needed image, it'll add the mvp instead
-//   this is temporary, it's a shitty solution
 
 // Simple means the system will create a square that fills the screen and run
 // the shaders on that. Complex is what you'd use for rendering the actual
 // geometry, providing your own objects.
-
-pub struct ComplexPass<'a> {
-    pub images_created: Vec<&'a str>,
-    pub images_needed: Vec<&'a str>,
-    pub resources_needed: Vec<&'a str>,
-    pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-}
-
-pub struct SimplePass<'a> {
-    pub images_created: Vec<&'a str>,
-    pub images_needed: Vec<&'a str>,
-    pub resources_needed: Vec<&'a str>,
-    pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-    // because no objects are passed to a Simple Pass, the pipeline is set
-    // for the whole pass instead of individual objects
-    // the shaders are included in the pipeline, so they are also part of
-    // this
-    pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+pub enum Pass<'a> {
+    Complex {
+        images_created: Vec<&'a str>,
+        images_needed: Vec<&'a str>,
+        resources_needed: Vec<&'a str>,
+        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    },
+    Simple {
+        images_created: Vec<&'a str>,
+        images_needed: Vec<&'a str>,
+        resources_needed: Vec<&'a str>,
+        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+        // because no objects are passed to a Simple Pass, the pipeline is set
+        // for the whole pass instead of individual objects
+        // the shaders are included in the pipeline, so they are also part of
+        // this
+        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    },
 }
 
 impl<'a> System<'a> {
-    pub fn new(queue: Arc<Queue>, passes: Vec<Box<dyn Pass>>, output_tag: &'a str) -> Self {
+    pub fn new(queue: Arc<Queue>, passes: Vec<Pass<'a>>, output_tag: &'a str) -> Self {
         let device = queue.device().clone();
 
         let sampler = Sampler::new(
@@ -163,29 +161,11 @@ impl<'a> System<'a> {
         let dynamic_state = dynamic_state_for_dimensions(dimensions);
 
         // create all images and framebuffers
-        let mut images: HashMap<&str, Arc<dyn ImageViewAccess + Send + Sync>> = HashMap::new();
-        let mut framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>> = vec![];
-        for pass in self.passes.iter() {
-            let mut images_for_pass = vec![];
-            for (image_idx, image_tag) in pass.get_images_created().iter().enumerate() {
-                // TODO: add a range check
-                let image = if *image_tag == self.output_tag {
-                    dest_image.clone()
-                } else {
-                    let desc = pass
-                        .get_render_pass()
-                        .attachment_desc(image_idx)
-                        .expect("pls no");
-                    create_image_for_desc(self.device.clone(), dimensions, desc)
-                };
+        let mut images = images_for_passes(self.device.clone(), dimensions, &self.passes);
+        // replace destination image with the real one
+        images.insert(self.output_tag, dest_image);
 
-                images.insert(image_tag, image.clone());
-                images_for_pass.push(image.clone());
-            }
-
-            let framebuffer = fb_from_images(pass.get_render_pass().clone(), images_for_pass);
-            framebuffers.push(framebuffer);
-        }
+        let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
 
         // add all images not produced by passes
         for (image_tag, image) in shared_resources.images.iter() {
@@ -209,68 +189,99 @@ impl<'a> System<'a> {
                 .begin_render_pass(framebuffer, false, clear_values)
                 .unwrap();
 
-            // if it's a complex pass take the objects we were given, if it's a
-            // simple one just use a screen-villing vbuf
-            let pass_objects = if pass.provides_own_geometry() {
-                objects[idx].clone()
-            } else {
-                vec![RenderableObject {
-                    pipeline: pass.get_pipeline(),
-                    vbuf: self.simple_vbuf.clone(),
-                    ibuf: self.simple_ibuf.clone(),
-                    additional_resources: None,
-                }]
-            };
+            // TODO: make naming more clear on when it's just the tag and when
+            // it's the actual image
+            let images_needed: Vec<Arc<dyn ImageViewAccess + Send + Sync>> = pass
+                .get_images_needed()
+                .iter()
+                .map(|tag| {
+                    images
+                        .get(tag)
+                        .expect("missing key when getting image in system")
+                        .clone()
+                })
+                .collect();
 
-            for object in pass_objects.iter() {
-                // TODO: don't make a set for every object
-                // create a descriptor set with samplers for each of the needed images
-                let images_needed: Vec<_> = pass
-                    .get_images_needed()
-                    .iter()
-                    .map(|tag| images.get(tag).expect("missing key").clone())
-                    .collect();
+            let resources_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
+                .get_resources_needed()
+                .iter()
+                .map(|tag| {
+                    shared_resources
+                        .buffers
+                        .get(tag)
+                        .expect("missing key when getting resource in system")
+                        .clone()
+                })
+                .collect();
 
-                let resources_needed: Vec<_> = pass
-                    .get_resources_needed()
-                    .iter()
-                    .map(|tag| {
-                        shared_resources
-                            .buffers
-                            .get(tag)
-                            .expect("missing key")
-                            .clone()
-                    })
-                    .collect();
+            match pass {
+                Pass::Complex { .. } => {
+                    let pass_objects = objects[idx].clone();
 
-                // TODO: duuuuude this kinda stuff needs documentation, this
-                // whole file needs a good cleaning
-                let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
+                    for object in pass_objects.iter() {
+                        // create uniform collection for object
+                        // TODO: move this to its own function
+                        let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
 
-                let image_set =
-                    pds_for_images(self.sampler.clone(), object.pipeline.clone(), images_needed);
-                let resource_set =
-                    pds_for_resources(object.pipeline.clone(), resources_needed, resource_set_idx);
-                let sets_collection = match (image_set, resource_set) {
-                    (None, None) => vec![],
-                    (Some(real_image_set), None) => vec![real_image_set.clone()],
-                    (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
-                    (Some(real_image_set), Some(real_resource_set)) => {
-                        vec![real_image_set.clone(), real_resource_set.clone()]
+                        let image_set = pds_for_images(
+                            self.sampler.clone(),
+                            object.pipeline.clone(),
+                            &images_needed,
+                        );
+                        let resource_set = pds_for_resources(
+                            object.pipeline.clone(),
+                            &resources_needed,
+                            resource_set_idx,
+                        );
+                        let sets_collection = match (image_set, resource_set) {
+                            (None, None) => vec![],
+                            (Some(real_image_set), None) => vec![real_image_set.clone()],
+                            (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
+                            (Some(real_image_set), Some(real_resource_set)) => {
+                                vec![real_image_set.clone(), real_resource_set.clone()]
+                            }
+                        };
+
+                        cmd_buf_builder = cmd_buf_builder
+                            .draw_indexed(
+                                object.pipeline.clone(),
+                                &dynamic_state,
+                                vec![object.vbuf.clone()],
+                                object.ibuf.clone(),
+                                sets_collection,
+                                (),
+                            )
+                            .unwrap();
                     }
-                };
+                }
+                Pass::Simple { pipeline, .. } => {
+                    let resource_set_idx = if images_needed.len() >= 1 { 1 } else { 0 };
 
-                cmd_buf_builder = cmd_buf_builder
-                    .draw_indexed(
-                        object.pipeline.clone(),
-                        &dynamic_state,
-                        vec![object.vbuf.clone()],
-                        object.ibuf.clone(),
-                        sets_collection,
-                        (),
-                    )
-                    .unwrap();
-            }
+                    let image_set =
+                        pds_for_images(self.sampler.clone(), pipeline.clone(), &images_needed);
+                    let resource_set =
+                        pds_for_resources(pipeline.clone(), &resources_needed, resource_set_idx);
+                    let sets_collection = match (image_set, resource_set) {
+                        (None, None) => vec![],
+                        (Some(real_image_set), None) => vec![real_image_set.clone()],
+                        (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
+                        (Some(real_image_set), Some(real_resource_set)) => {
+                            vec![real_image_set.clone(), real_resource_set.clone()]
+                        }
+                    };
+
+                    cmd_buf_builder = cmd_buf_builder
+                        .draw_indexed(
+                            pipeline.clone(),
+                            &dynamic_state,
+                            vec![self.simple_vbuf.clone()],
+                            self.simple_ibuf.clone(),
+                            sets_collection,
+                            (),
+                        )
+                        .unwrap();
+                }
+            };
 
             cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
         }
@@ -284,7 +295,7 @@ impl<'a> System<'a> {
         )
     }
 
-    pub fn get_passes(&self) -> &[Box<dyn Pass>] {
+    pub fn get_passes(&self) -> &[Pass] {
         &self.passes
     }
 }
@@ -294,7 +305,6 @@ pub struct RenderableObject {
     pub pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
-    pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 fn create_image_for_desc(
@@ -323,7 +333,7 @@ fn dynamic_state_for_dimensions(dimensions: [u32; 2]) -> DynamicState {
 fn pds_for_images(
     sampler: Arc<Sampler>,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    images: Vec<Arc<dyn ImageViewAccess + Send + Sync>>,
+    images: &[Arc<dyn ImageViewAccess + Send + Sync>],
 ) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
     match images.len() {
         0 => None,
@@ -373,7 +383,7 @@ fn pds_for_images(
 
 fn pds_for_resources(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
+    resources: &[Arc<dyn BufferAccess + Send + Sync>],
     set_idx: usize,
 ) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
     match resources.len() {
@@ -472,66 +482,86 @@ fn fb_from_images(
     }
 }
 
-impl<'a> Pass for SimplePass<'a> {
-    fn get_images_created(&self) -> Vec<&str> {
-        self.images_created.clone()
+fn images_for_passes<'a>(
+    device: Arc<Device>,
+    dimensions: [u32; 2],
+    passes: &'a [Pass],
+) -> HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>> {
+    // for now this ignores the fact that the output image is special and
+    // provided from outside System. any users of this function should replace
+    // that image with the real one afterwards.
+    let mut images = HashMap::new();
+    for pass in passes.iter() {
+        for (image_idx, &image_tag) in pass.get_images_created().iter().enumerate() {
+            let desc = pass
+                .get_render_pass()
+                .attachment_desc(image_idx)
+                .expect("Couldn't get the attachment description when creating images for passes");
+            let image = create_image_for_desc(device.clone(), dimensions, desc);
+            images.insert(image_tag, image);
+        }
     }
 
-    fn get_images_needed(&self) -> Vec<&str> {
-        self.images_needed.clone()
-    }
-
-    fn get_resources_needed(&self) -> Vec<&str> {
-        self.resources_needed.clone()
-    }
-
-    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
-        self.render_pass.clone()
-    }
-
-    fn provides_own_geometry(&self) -> bool {
-        false
-    }
-
-    fn get_pipeline(&self) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
-        self.pipeline.clone()
-    }
+    images
 }
 
-impl<'a> Pass for ComplexPass<'a> {
-    fn get_images_created(&self) -> Vec<&str> {
-        self.images_created.clone()
+fn framebuffers_for_passes<'a>(
+    images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
+    passes: &'a [Pass],
+) -> Vec<Arc<dyn FramebufferAbstract + Send + Sync>> {
+    let mut framebuffers = vec![];
+
+    for pass in passes.iter() {
+        let images_tags_created = pass.get_images_created();
+        let images = images_tags_created
+            .iter()
+            .map(|tag| {
+                images
+                    .get(tag)
+                    .expect("Couldn't get image when creating framebuffers for passes")
+                    .clone()
+            })
+            .collect();
+
+        let framebuffer = fb_from_images(pass.get_render_pass(), images);
+        framebuffers.push(framebuffer);
     }
 
-    fn get_images_needed(&self) -> Vec<&str> {
-        self.images_needed.clone()
-    }
-
-    fn get_resources_needed(&self) -> Vec<&str> {
-        self.resources_needed.clone()
-    }
-
-    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
-        self.render_pass.clone()
-    }
-
-    fn provides_own_geometry(&self) -> bool {
-        true
-    }
-
-    fn get_pipeline(&self) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
-        panic!("You tried to get the pipeline from pass that provides its own geometry!");
-    }
+    framebuffers
 }
 
-pub trait Pass {
-    fn get_images_created(&self) -> Vec<&str>;
-    fn get_images_needed(&self) -> Vec<&str>;
-    fn get_resources_needed(&self) -> Vec<&str>;
-    fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync>;
-    fn provides_own_geometry(&self) -> bool;
-    // TODO: make this less of a mess. Maybe get enums to work again? idk
-    fn get_pipeline(&self) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync>;
+impl<'a> Pass<'a> {
+    pub fn get_images_created(&self) -> &[&str] {
+        match self {
+            Pass::Complex { images_created, .. } => images_created,
+            Pass::Simple { images_created, .. } => images_created,
+        }
+    }
+
+    pub fn get_images_needed(&self) -> &[&str] {
+        match self {
+            Pass::Complex { images_needed, .. } => images_needed,
+            Pass::Simple { images_needed, .. } => images_needed,
+        }
+    }
+
+    pub fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
+        match self {
+            Pass::Complex { render_pass, .. } => render_pass.clone(),
+            Pass::Simple { render_pass, .. } => render_pass.clone(),
+        }
+    }
+
+    pub fn get_resources_needed(&self) -> &[&str] {
+        match self {
+            Pass::Complex {
+                resources_needed, ..
+            } => resources_needed,
+            Pass::Simple {
+                resources_needed, ..
+            } => resources_needed,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone)]

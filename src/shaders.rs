@@ -6,11 +6,12 @@ use shade_runner::{
     load, parse, Entry, FragInput, FragLayout, FragOutput, VertInput, VertLayout, VertOutput,
 };
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Shader {
+    pub path: PathBuf,
     pub module: Arc<ShaderModule>,
     pub entry: Entry,
 }
@@ -33,11 +34,13 @@ impl ShaderSystem {
             unsafe { ShaderModule::from_words(device.clone(), &shaders.fragment) }.unwrap();
 
         let vs = Shader {
+            path: vs_path.to_path_buf(),
             module: vs_module,
             entry: entry.clone(),
         };
 
         let fs = Shader {
+            path: fs_path.to_path_buf(),
             module: fs_module,
             entry: entry.clone(),
         };

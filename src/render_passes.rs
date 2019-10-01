@@ -100,6 +100,7 @@ pub fn basic(device: Arc<Device>) -> RenderPass {
     )
 }
 
+// TODO: add every format to this
 pub fn clear_values_for_pass(
     render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
 ) -> Vec<ClearValue> {

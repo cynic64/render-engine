@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::camera::OrbitCamera;
 use crate::producer::ProducerCollection;
 use crate::render_passes;
-use crate::system::{ComplexPass, System};
+use crate::system::{Pass, System};
 
 // TODO: shaders should be chosen here, because then everything is stored in one
 // place and pieces becoming invalid is less likely
@@ -15,7 +15,7 @@ pub fn forward<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollection) {
     let device = queue.device().clone();
 
     // create system
-    let pass1 = ComplexPass {
+    let pass1 = Pass::Complex {
         images_needed: vec![],
         images_created: vec!["color"],
         resources_needed: vec!["view_proj"],
@@ -24,7 +24,7 @@ pub fn forward<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollection) {
 
     let output_tag = "color";
 
-    let system = System::new(queue, vec![Box::new(pass1)], output_tag);
+    let system = System::new(queue, vec![pass1], output_tag);
 
     // create producers
     let camera = OrbitCamera::default();
@@ -39,7 +39,7 @@ pub fn forward_with_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
     let device = queue.device().clone();
 
     // create system
-    let pass1 = ComplexPass {
+    let pass1 = Pass::Complex {
         images_needed: vec![],
         images_created: vec!["color", "depth"],
         resources_needed: vec!["view_proj"],
@@ -48,7 +48,7 @@ pub fn forward_with_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
 
     let output_tag = "color";
 
-    let system = System::new(queue, vec![Box::new(pass1)], output_tag);
+    let system = System::new(queue, vec![pass1], output_tag);
 
     // create producers
     // TODO: hopefully the duplication of all this stuff will be improved by a
@@ -65,7 +65,7 @@ pub fn forward_msaa_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
     let device = queue.device().clone();
 
     // create system
-    let pass1 = ComplexPass {
+    let pass1 = Pass::Complex {
         images_needed: vec![],
         images_created: vec![
             "resolve_color",
@@ -79,7 +79,7 @@ pub fn forward_msaa_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
 
     let output_tag = "resolve_color";
 
-    let system = System::new(queue, vec![Box::new(pass1)], output_tag);
+    let system = System::new(queue, vec![pass1], output_tag);
 
     // create producers
     let camera = OrbitCamera::default();
