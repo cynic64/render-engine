@@ -54,12 +54,14 @@ pub struct System<'a> {
 // geometry, providing your own objects.
 pub enum Pass<'a> {
     Complex {
+        name: &'a str,
         images_created: Vec<&'a str>,
         images_needed: Vec<&'a str>,
         buffers_needed: Vec<&'a str>,
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     },
     Simple {
+        name: &'a str,
         images_created: Vec<&'a str>,
         images_needed: Vec<&'a str>,
         buffers_needed: Vec<&'a str>,
@@ -107,9 +109,7 @@ impl<'a> System<'a> {
     pub fn draw_frame<F>(
         &mut self,
         dimensions: [u32; 2],
-        // TODO: switch to a hashmap for this, with keys being the pass and a
-        // list of objects for each
-        objects: Vec<Vec<RenderableObject>>,
+        objects: HashMap<&str, Vec<RenderableObject>>,
         shared_resources: SharedResources,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
@@ -178,7 +178,7 @@ impl<'a> System<'a> {
 
             match pass {
                 Pass::Complex { .. } => {
-                    let pass_objects = objects[pass_idx].clone();
+                    let pass_objects = objects[pass.name()].clone();
 
                     for object in pass_objects.iter() {
                         let collection = collection_from_resources(
@@ -494,6 +494,13 @@ fn framebuffers_for_passes<'a>(
 }
 
 impl<'a> Pass<'a> {
+    pub fn name(&self) -> &str {
+        match self {
+            Pass::Complex { name, .. } => name,
+            Pass::Simple { name, .. } => name,
+        }
+    }
+
     pub fn images_created_tags(&self) -> &[&str] {
         match self {
             Pass::Complex { images_created, .. } => images_created,

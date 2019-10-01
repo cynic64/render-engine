@@ -8,6 +8,7 @@ use vulkano_win::VkSurfaceBuild;
 use winit::{EventsLoop, Window, WindowBuilder};
 
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use re_ll as ll;
 
@@ -175,7 +176,8 @@ impl<'a> App<'a> {
 
     fn create_command_buffer(&mut self) {
         let world_renderable_objects = self.world.get_objects();
-        let all_renderable_objects = vec![world_renderable_objects];
+        let mut all_renderable_objects = HashMap::new();
+        all_renderable_objects.insert("geometry", world_renderable_objects);
         let swapchain_image = self.vk_window.next_image();
         let swapchain_fut = self.vk_window.get_future();
         let shared_resources = self.producers.get_shared_resources(self.device.clone());

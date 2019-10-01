@@ -16,6 +16,7 @@ pub fn forward<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollection) {
 
     // create system
     let pass1 = Pass::Complex {
+        name: "geometry",
         images_needed: vec![],
         images_created: vec!["color"],
         buffers_needed: vec!["view_proj"],
@@ -40,6 +41,7 @@ pub fn forward_with_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
 
     // create system
     let pass1 = Pass::Complex {
+        name: "geometry",
         images_needed: vec![],
         images_created: vec!["color", "depth"],
         buffers_needed: vec!["view_proj"],
@@ -66,6 +68,7 @@ pub fn forward_msaa_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
 
     // create system
     let pass1 = Pass::Complex {
+        name: "geometry",
         images_needed: vec![],
         images_created: vec![
             "resolve_color",
