@@ -141,7 +141,6 @@ impl<'a> System<'a> {
         )
         .unwrap();
 
-        // TODO: rename to pass_idx and restructure some of this
         for (pass_idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[pass_idx].clone();
 
@@ -151,8 +150,6 @@ impl<'a> System<'a> {
                 .begin_render_pass(framebuffer, false, clear_values)
                 .unwrap();
 
-            // TODO: make naming more clear on when it's just the tag and when
-            // it's the actual image
             let images_needed: Vec<Arc<dyn ImageViewAccess + Send + Sync>> = pass
                 .images_needed_tags()
                 .iter()
@@ -176,6 +173,8 @@ impl<'a> System<'a> {
                 })
                 .collect();
 
+            // if it's a complex pass use the objects provided for that pass, if
+            // it's a simple one use a screen-filling vbuf
             match pass {
                 Pass::Complex { .. } => {
                     let pass_objects = objects[pass.name()].clone();
@@ -536,7 +535,7 @@ pub struct SimpleVertex {
 }
 vulkano::impl_vertex!(SimpleVertex, position);
 
-// TODO: maybe rename to vertex3D?
+// TODO: maybe rename to vertex3D and move some of these somewhere else?
 #[derive(Default, Debug, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],

@@ -1,4 +1,3 @@
-use vulkano::command_buffer::AutoCommandBuffer;
 use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::swapchain::Surface;
@@ -23,7 +22,6 @@ pub struct App<'a> {
     device: Arc<Device>,
     queue: Arc<Queue>,
     pub done: bool,
-    command_buffer: Option<AutoCommandBuffer>,
     world: World,
     vk_window: ll::vk_window::VkWindow,
     system: System<'a>,
@@ -88,8 +86,6 @@ impl<'a> App<'a> {
             device,
             queue,
             done: false,
-            // TODO; get rid of create of create_command_buffer and this
-            command_buffer: None,
             world,
             vk_window,
             system,
@@ -126,8 +122,7 @@ impl<'a> App<'a> {
     pub fn draw_frame(&mut self) {
         self.setup_frame();
 
-        self.create_command_buffer();
-        self.submit_and_check();
+        self.draw_objects();
 
         self.handle_input();
         self.world.update();
@@ -169,12 +164,9 @@ impl<'a> App<'a> {
                 y: (dimensions[1] as f64) / 2.0,
             })
             .expect("Couldn't re-set cursor position!");
-
-        // it should always be none before drawing the frame anyway, but just make sure
-        self.command_buffer = None;
     }
 
-    fn create_command_buffer(&mut self) {
+    fn draw_objects(&mut self) {
         let world_renderable_objects = self.world.get_objects();
         let mut all_renderable_objects = HashMap::new();
         all_renderable_objects.insert("geometry", world_renderable_objects);
@@ -182,6 +174,7 @@ impl<'a> App<'a> {
         let swapchain_fut = self.vk_window.get_future();
         let shared_resources = self.producers.get_shared_resources(self.device.clone());
 
+        // draw_frame returns a future representing the completion of rendering
         let frame_fut = self.system.draw_frame(
             swapchain_image.dimensions(),
             all_renderable_objects,
@@ -191,11 +184,6 @@ impl<'a> App<'a> {
         );
 
         self.vk_window.present_image(self.queue.clone(), frame_fut);
-    }
-
-    fn submit_and_check(&mut self) {
-        //     self.vk_window
-        //         .submit_command_buffer(self.queue.clone(), self.command_buffer.take().unwrap());
     }
 }
 
