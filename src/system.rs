@@ -1,8 +1,6 @@
-use vulkano::buffer::{BufferAccess, BufferUsage, CpuAccessibleBuffer};
+use vulkano::buffer::{BufferAccess, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::descriptor_set::{
-    DescriptorSet, PersistentDescriptorSet,
-};
+use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
@@ -16,6 +14,7 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::mesh_gen;
 use crate::producer::SharedResources;
 use crate::render_passes;
 
@@ -38,13 +37,6 @@ pub struct System<'a> {
     queue: Arc<Queue>,
     output_tag: &'a str,
 }
-
-// TODO: some of the docs below are BS, because in a complex pass the vertex
-// shader and fragment combo is not always the same (different objects can have
-// different pipelines and all that). Make it consistent!
-// maybe rename to PixelPass and GeoPass and include a 3rd option for different
-// objects with different pipelines
-// How bout PixelPass, HomoGeoPass and HeteroGeoPass?
 
 // A pass is a single operation carried out by a vertex shader and fragment
 // shader combination. For example: a geometry pass to draw some objects in 3D
@@ -99,39 +91,7 @@ impl<'a> System<'a> {
         )
         .unwrap();
 
-        // TODO: move these to another file
-        let simple_vbuf = {
-            CpuAccessibleBuffer::from_iter(
-                device.clone(),
-                BufferUsage::all(),
-                [
-                    SimpleVertex {
-                        position: [-1.0, -1.0],
-                    },
-                    SimpleVertex {
-                        position: [-1.0, 1.0],
-                    },
-                    SimpleVertex {
-                        position: [1.0, -1.0],
-                    },
-                    SimpleVertex {
-                        position: [1.0, 1.0],
-                    },
-                ]
-                .iter()
-                .cloned(),
-            )
-            .unwrap()
-        };
-
-        let simple_ibuf = {
-            CpuAccessibleBuffer::from_iter(
-                device.clone(),
-                BufferUsage::all(),
-                [0, 1, 2, 3].iter().cloned(),
-            )
-            .unwrap()
-        };
+        let (simple_vbuf, simple_ibuf) = mesh_gen::create_buffers_for_screen_square(device.clone());
 
         Self {
             passes,
@@ -557,19 +517,15 @@ impl<'a> Pass<'a> {
 
     pub fn buffers_needed_tags(&self) -> &[&str] {
         match self {
-            Pass::Complex {
-                buffers_needed, ..
-            } => buffers_needed,
-            Pass::Simple {
-                buffers_needed, ..
-            } => buffers_needed,
+            Pass::Complex { buffers_needed, .. } => buffers_needed,
+            Pass::Simple { buffers_needed, .. } => buffers_needed,
         }
     }
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct SimpleVertex {
-    position: [f32; 2],
+    pub position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex, position);
 

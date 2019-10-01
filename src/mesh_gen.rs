@@ -1,9 +1,13 @@
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
+use vulkano::device::Device;
+
 // TODO: maybe define vertex here instead of in system?
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error};
 use std::path::Path;
+use std::sync::Arc;
 
-use crate::system::Vertex;
+use crate::system::{SimpleVertex, Vertex};
 use crate::world::Mesh;
 
 #[rustfmt::skip]
@@ -103,14 +107,19 @@ pub fn load_obj(path: &Path) -> Result<Mesh, Error> {
         }
     }
 
-    let final_vertices: Vec<Vertex> = vertices.iter().enumerate().map(|(idx, v)| Vertex {
-        position: *v,
-        normal: normals[vertices_with_normal_indices[idx]],
-    }).collect();
+    let final_vertices: Vec<Vertex> = vertices
+        .iter()
+        .enumerate()
+        .map(|(idx, v)| Vertex {
+            position: *v,
+            normal: normals[vertices_with_normal_indices[idx]],
+        })
+        .collect();
 
-    let final_indices = faces.iter().flat_map(|(v1, v2, v3, _, _, _)| {
-        vec![*v1 - 1, *v2 - 1, *v3 - 1]
-    }).collect();
+    let final_indices = faces
+        .iter()
+        .flat_map(|(v1, v2, v3, _, _, _)| vec![*v1 - 1, *v2 - 1, *v3 - 1])
+        .collect();
 
     Ok(Mesh {
         vertices: Box::new(final_vertices),
@@ -158,4 +167,46 @@ pub fn create_vertices_for_cube_edges(center_position: [f32; 3], radius: f32) ->
         vertices: Box::new(vertices),
         indices,
     }
+}
+
+pub fn create_buffers_for_screen_square(
+    device: Arc<Device>,
+) -> (
+    Arc<CpuAccessibleBuffer<[SimpleVertex]>>,
+    Arc<CpuAccessibleBuffer<[u32]>>,
+) {
+    let simple_vbuf = {
+        CpuAccessibleBuffer::from_iter(
+            device.clone(),
+            BufferUsage::all(),
+            [
+                SimpleVertex {
+                    position: [-1.0, -1.0],
+                },
+                SimpleVertex {
+                    position: [-1.0, 1.0],
+                },
+                SimpleVertex {
+                    position: [1.0, -1.0],
+                },
+                SimpleVertex {
+                    position: [1.0, 1.0],
+                },
+            ]
+            .iter()
+            .cloned(),
+        )
+        .unwrap()
+    };
+
+    let simple_ibuf = {
+        CpuAccessibleBuffer::from_iter(
+            device.clone(),
+            BufferUsage::all(),
+            [0, 1, 2, 3].iter().cloned(),
+        )
+        .unwrap()
+    };
+
+    (simple_vbuf, simple_ibuf)
 }
