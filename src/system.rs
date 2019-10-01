@@ -64,13 +64,13 @@ pub enum Pass<'a> {
     Complex {
         images_created: Vec<&'a str>,
         images_needed: Vec<&'a str>,
-        resources_needed: Vec<&'a str>,
+        buffers_needed: Vec<&'a str>,
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
     },
     Simple {
         images_created: Vec<&'a str>,
         images_needed: Vec<&'a str>,
-        resources_needed: Vec<&'a str>,
+        buffers_needed: Vec<&'a str>,
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
         // because no objects are passed to a Simple Pass, the pipeline is set
         // for the whole pass instead of individual objects
@@ -204,8 +204,8 @@ impl<'a> System<'a> {
                 })
                 .collect();
 
-            let resources_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
-                .resources_needed_tags()
+            let buffers_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
+                .buffers_needed_tags()
                 .iter()
                 .map(|tag| {
                     shared_resources
@@ -225,7 +225,7 @@ impl<'a> System<'a> {
                             self.sampler.clone(),
                             object.pipeline.clone(),
                             &images_needed,
-                            &resources_needed,
+                            &buffers_needed,
                         );
 
                         cmd_buf_builder = cmd_buf_builder
@@ -245,7 +245,7 @@ impl<'a> System<'a> {
                         self.sampler.clone(),
                         pipeline.clone(),
                         &images_needed,
-                        &resources_needed,
+                        &buffers_needed,
                     );
 
                     cmd_buf_builder = cmd_buf_builder
@@ -312,14 +312,13 @@ fn collection_from_resources(
     sampler: Arc<Sampler>,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     images: &[Arc<dyn ImageViewAccess + Send + Sync>],
-    resources: &[Arc<dyn BufferAccess + Send + Sync>],
+    buffers: &[Arc<dyn BufferAccess + Send + Sync>],
 ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
     let resource_set_idx = if images.len() >= 1 { 1 } else { 0 };
 
     let image_set = pds_for_images(sampler, pipeline.clone(), &images);
 
-    // TODO: maybe rename resources to buffers?
-    let resource_set = pds_for_resources(pipeline.clone(), &resources, resource_set_idx);
+    let resource_set = pds_for_buffers(pipeline.clone(), &buffers, resource_set_idx);
 
     // either no images and no buffers were needed, or images but no buffers, or
     // buffers but no images, or buffers and images. this handles every case and
@@ -385,54 +384,54 @@ fn pds_for_images(
     }
 }
 
-fn pds_for_resources(
+fn pds_for_buffers(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    resources: &[Arc<dyn BufferAccess + Send + Sync>],
+    buffers: &[Arc<dyn BufferAccess + Send + Sync>],
     set_idx: usize,
 ) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
-    match resources.len() {
+    match buffers.len() {
         0 => None,
         1 => Some(Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(resources[0].clone())
+                .add_buffer(buffers[0].clone())
                 .unwrap()
                 .build()
                 .unwrap(),
         )),
         2 => Some(Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(resources[0].clone())
+                .add_buffer(buffers[0].clone())
                 .unwrap()
-                .add_buffer(resources[1].clone())
+                .add_buffer(buffers[1].clone())
                 .unwrap()
                 .build()
                 .unwrap(),
         )),
         3 => Some(Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(resources[0].clone())
+                .add_buffer(buffers[0].clone())
                 .unwrap()
-                .add_buffer(resources[1].clone())
+                .add_buffer(buffers[1].clone())
                 .unwrap()
-                .add_buffer(resources[2].clone())
+                .add_buffer(buffers[2].clone())
                 .unwrap()
                 .build()
                 .unwrap(),
         )),
         4 => Some(Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(resources[0].clone())
+                .add_buffer(buffers[0].clone())
                 .unwrap()
-                .add_buffer(resources[1].clone())
+                .add_buffer(buffers[1].clone())
                 .unwrap()
-                .add_buffer(resources[2].clone())
+                .add_buffer(buffers[2].clone())
                 .unwrap()
-                .add_buffer(resources[3].clone())
+                .add_buffer(buffers[3].clone())
                 .unwrap()
                 .build()
                 .unwrap(),
         )),
-        _ => panic!("pds_for_resources does not support more than 4 resources!"),
+        _ => panic!("pds_for_buffers does not support more than 4 buffers!"),
     }
 }
 
@@ -556,14 +555,14 @@ impl<'a> Pass<'a> {
         }
     }
 
-    pub fn resources_needed_tags(&self) -> &[&str] {
+    pub fn buffers_needed_tags(&self) -> &[&str] {
         match self {
             Pass::Complex {
-                resources_needed, ..
-            } => resources_needed,
+                buffers_needed, ..
+            } => buffers_needed,
             Pass::Simple {
-                resources_needed, ..
-            } => resources_needed,
+                buffers_needed, ..
+            } => buffers_needed,
         }
     }
 }

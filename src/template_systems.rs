@@ -18,7 +18,7 @@ pub fn forward<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollection) {
     let pass1 = Pass::Complex {
         images_needed: vec![],
         images_created: vec!["color"],
-        resources_needed: vec!["view_proj"],
+        buffers_needed: vec!["view_proj"],
         render_pass: render_passes::basic(device.clone()),
     };
 
@@ -42,7 +42,7 @@ pub fn forward_with_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
     let pass1 = Pass::Complex {
         images_needed: vec![],
         images_created: vec!["color", "depth"],
-        resources_needed: vec!["view_proj"],
+        buffers_needed: vec!["view_proj"],
         render_pass: render_passes::with_depth(device.clone()),
     };
 
@@ -73,7 +73,7 @@ pub fn forward_msaa_depth<'a>(queue: Arc<Queue>) -> (System<'a>, ProducerCollect
             "multisampled_depth",
             "resolve_depth",
         ],
-        resources_needed: vec!["view_proj"],
+        buffers_needed: vec!["view_proj"],
         render_pass: render_passes::multisampled_with_depth(device.clone(), 4),
     };
 
