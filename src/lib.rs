@@ -13,6 +13,7 @@ pub mod template_systems;
 pub mod producer;
 
 pub mod pipeline_cache;
+pub mod collection_cache;
 
 pub mod input;
 

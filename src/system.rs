@@ -1,14 +1,11 @@
 use vulkano::buffer::{BufferAccess, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
 };
 use vulkano::image::{AttachmentImage, ImageViewAccess};
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::pipeline::GraphicsPipelineAbstract;
-use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 use vulkano::sync::GpuFuture;
 
 use std::collections::HashMap;
@@ -16,6 +13,7 @@ use std::sync::Arc;
 
 use crate::mesh_gen;
 use crate::pipeline_cache::{PipelineCache, PipelineSpec};
+use crate::collection_cache::CollectionCache;
 use crate::producer::SharedResources;
 use crate::render_passes;
 
@@ -31,7 +29,7 @@ use crate::render_passes;
 pub struct System<'a> {
     passes: Vec<Pass<'a>>,
     pipeline_caches: Vec<PipelineCache>,
-    sampler: Arc<Sampler>,
+    collection_cache: CollectionCache,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
     simple_ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
@@ -72,7 +70,7 @@ pub enum Pass<'a> {
         // for the whole pass instead of individual objects
         // the shaders are included in the pipeline, so they are also part of
         // this
-        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        pipeline_spec: PipelineSpec,
     },
 }
 
@@ -80,29 +78,15 @@ impl<'a> System<'a> {
     pub fn new(queue: Arc<Queue>, passes: Vec<Pass<'a>>, output_tag: &'a str) -> Self {
         let device = queue.device().clone();
 
-        let sampler = Sampler::new(
-            device.clone(),
-            Filter::Linear,
-            Filter::Linear,
-            MipmapMode::Nearest,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-        )
-        .unwrap();
-
         let (simple_vbuf, simple_ibuf) = mesh_gen::create_buffers_for_screen_square(device.clone());
 
         let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
+        let collection_cache = CollectionCache::new(device.clone());
 
         Self {
             passes,
             pipeline_caches,
-            sampler,
+            collection_cache,
             simple_vbuf,
             simple_ibuf,
             device,
@@ -155,29 +139,6 @@ impl<'a> System<'a> {
                 .begin_render_pass(framebuffer, false, clear_values)
                 .unwrap();
 
-            let images_needed: Vec<Arc<dyn ImageViewAccess + Send + Sync>> = pass
-                .images_needed_tags()
-                .iter()
-                .map(|tag| {
-                    images
-                        .get(tag)
-                        .expect("missing key when getting image in system")
-                        .clone()
-                })
-                .collect();
-
-            let buffers_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
-                .buffers_needed_tags()
-                .iter()
-                .map(|tag| {
-                    shared_resources
-                        .buffers
-                        .get(tag)
-                        .expect("missing key when getting resource in system")
-                        .clone()
-                })
-                .collect();
-
             // if it's a complex pass use the objects provided for that pass, if
             // it's a simple one use a screen-filling vbuf
             match pass {
@@ -187,11 +148,12 @@ impl<'a> System<'a> {
                     for object in pass_objects.iter() {
                         let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
-                        let collection = collection_from_resources(
-                            self.sampler.clone(),
+                        let collection = self.collection_cache.get(
+                            &object.pipeline_spec,
                             pipeline.clone(),
-                            &images_needed,
-                            &buffers_needed,
+                            &pass,
+                            &images,
+                            &shared_resources,
                         );
 
                         cmd_buf_builder = cmd_buf_builder
@@ -206,12 +168,15 @@ impl<'a> System<'a> {
                             .unwrap();
                     }
                 }
-                Pass::Simple { pipeline, .. } => {
-                    let collection = collection_from_resources(
-                        self.sampler.clone(),
+                Pass::Simple { pipeline_spec, .. } => {
+                    let pipeline = self.pipeline_caches[pass_idx].get(&pipeline_spec);
+
+                    let collection = self.collection_cache.get(
+                        &pipeline_spec,
                         pipeline.clone(),
-                        &images_needed,
-                        &buffers_needed,
+                        &pass,
+                        &images,
+                        &shared_resources,
                     );
 
                     cmd_buf_builder = cmd_buf_builder
@@ -230,6 +195,10 @@ impl<'a> System<'a> {
             cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
         }
 
+        // uniforms usualy change between frames, no point caching them between
+        // frames
+        self.collection_cache.clear();
+
         let final_cmd_buf = cmd_buf_builder.build().unwrap();
 
         Box::new(
@@ -245,9 +214,11 @@ impl<'a> System<'a> {
 
     pub fn print_stats(&self) {
         (0..self.passes.len()).for_each(|idx| {
-            println!("Stats for cache pass {}:", self.passes[idx].name());
+            println!("Pipeline cache stats for pass {}:", self.passes[idx].name());
             self.pipeline_caches[idx].print_stats();
             println!();
+            println!("Collection cache stats:");
+            self.collection_cache.print_stats();
         })
     }
 }
@@ -279,133 +250,6 @@ fn dynamic_state_for_dimensions(dimensions: [u32; 2]) -> DynamicState {
         line_width: None,
         viewports: Some(vec![viewport]),
         scissors: None,
-    }
-}
-
-fn collection_from_resources(
-    sampler: Arc<Sampler>,
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    images: &[Arc<dyn ImageViewAccess + Send + Sync>],
-    buffers: &[Arc<dyn BufferAccess + Send + Sync>],
-) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
-    let resource_set_idx = if images.len() >= 1 { 1 } else { 0 };
-
-    let image_set = pds_for_images(sampler, pipeline.clone(), &images);
-
-    let resource_set = pds_for_buffers(pipeline.clone(), &buffers, resource_set_idx);
-
-    // either no images and no buffers were needed, or images but no buffers, or
-    // buffers but no images, or buffers and images. this handles every case and
-    // converts each into a vector of just the needed resources
-    match (image_set, resource_set) {
-        (None, None) => vec![],
-        (Some(real_image_set), None) => vec![real_image_set.clone()],
-        (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
-        (Some(real_image_set), Some(real_resource_set)) => {
-            vec![real_image_set.clone(), real_resource_set.clone()]
-        }
-    }
-}
-
-fn pds_for_images(
-    sampler: Arc<Sampler>,
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    images: &[Arc<dyn ImageViewAccess + Send + Sync>],
-) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
-    match images.len() {
-        0 => None,
-        1 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
-                .add_sampled_image(images[0].clone(), sampler)
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        2 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
-                .add_sampled_image(images[0].clone(), sampler.clone())
-                .unwrap()
-                .add_sampled_image(images[1].clone(), sampler.clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        3 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
-                .add_sampled_image(images[0].clone(), sampler.clone())
-                .unwrap()
-                .add_sampled_image(images[1].clone(), sampler.clone())
-                .unwrap()
-                .add_sampled_image(images[2].clone(), sampler.clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        4 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
-                .add_sampled_image(images[0].clone(), sampler.clone())
-                .unwrap()
-                .add_sampled_image(images[1].clone(), sampler.clone())
-                .unwrap()
-                .add_sampled_image(images[2].clone(), sampler.clone())
-                .unwrap()
-                .add_sampled_image(images[3].clone(), sampler.clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        _ => panic!("pds_for_images does not support more than 4 images!"),
-    }
-}
-
-fn pds_for_buffers(
-    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
-    buffers: &[Arc<dyn BufferAccess + Send + Sync>],
-    set_idx: usize,
-) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
-    match buffers.len() {
-        0 => None,
-        1 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(buffers[0].clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        2 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(buffers[0].clone())
-                .unwrap()
-                .add_buffer(buffers[1].clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        3 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(buffers[0].clone())
-                .unwrap()
-                .add_buffer(buffers[1].clone())
-                .unwrap()
-                .add_buffer(buffers[2].clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        4 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, set_idx)
-                .add_buffer(buffers[0].clone())
-                .unwrap()
-                .add_buffer(buffers[1].clone())
-                .unwrap()
-                .add_buffer(buffers[2].clone())
-                .unwrap()
-                .add_buffer(buffers[3].clone())
-                .unwrap()
-                .build()
-                .unwrap(),
-        )),
-        _ => panic!("pds_for_buffers does not support more than 4 buffers!"),
     }
 }
 
