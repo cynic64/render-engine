@@ -141,6 +141,8 @@ impl<'a> System<'a> {
 
             // if it's a complex pass use the objects provided for that pass, if
             // it's a simple one use a screen-filling vbuf
+
+            // TODO; rename simple and complex to pixel and geo
             match pass {
                 Pass::Complex { .. } => {
                     let pass_objects = objects[pass.name()].clone();
