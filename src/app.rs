@@ -64,7 +64,6 @@ impl<'a> App<'a> {
         // manually.
 
         let swapchain_caps = surface.capabilities(physical).unwrap();
-        // on my machine this is B8G8R8Unorm
 
         // create the system
         let (system, producers) = template_systems::forward_with_depth(queue.clone());

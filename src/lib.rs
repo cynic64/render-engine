@@ -17,6 +17,8 @@ pub mod collection_cache;
 
 pub mod input;
 
+pub mod utils;
+
 pub mod shaders;
 
 pub mod render_passes;
