@@ -12,7 +12,7 @@ pub struct EventHandler {
 }
 
 // information about the current frame
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FrameInfo {
     pub all_events: Vec<Event>,
     pub keydowns: Vec<VirtualKeyCode>,
@@ -197,7 +197,7 @@ impl FrameInfo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct KeysDown {
     pub a: bool,
     pub b: bool,
