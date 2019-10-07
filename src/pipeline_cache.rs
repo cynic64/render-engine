@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::input::get_elapsed;
 use crate::shaders::ShaderSystem;
-use crate::system::Vertex;
+use crate::system::{Vertex, SimpleVertex};
 
 // pipeline caches are specific to a single render pass.
 pub struct PipelineCache {
@@ -36,6 +36,7 @@ pub struct PipelineSpec {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
+    pub depth: bool,
 }
 
 impl PipelineCache {
@@ -73,8 +74,12 @@ impl PipelineCache {
 
                 let (vs_main, fs_main) = shader_sys.get_entry_points();
 
-                let pipeline = Arc::new(
-                    GraphicsPipeline::start()
+                // TODO: right now whether a depth pass is included or not
+                // determines the vertex type. This is dumb. Fix it with dynamic
+                // traits and all that crap I hate.
+                let pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync> = if spec.depth {
+                    Arc::new(
+                        GraphicsPipeline::start()
                         .vertex_input_single_buffer::<Vertex>()
                         .vertex_shader(vs_main, ())
                         .primitive_topology(spec.fill_type)
@@ -84,7 +89,20 @@ impl PipelineCache {
                         .depth_stencil_simple_depth()
                         .build(self.device.clone())
                         .unwrap(),
-                );
+                    )
+                } else {
+                    Arc::new(
+                        GraphicsPipeline::start()
+                            .vertex_input_single_buffer::<SimpleVertex>()
+                            .vertex_shader(vs_main, ())
+                            .primitive_topology(spec.fill_type)
+                            .viewports_dynamic_scissors_irrelevant(1)
+                            .fragment_shader(fs_main, ())
+                            .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
+                            .build(self.device.clone())
+                            .unwrap(),
+                    )
+                };
 
                 let c_pipe = CachedPipeline {
                     spec: spec.clone(),

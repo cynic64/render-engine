@@ -215,7 +215,7 @@ impl ObjectSpecBuilder {
                 relative_path("shaders/forward/default_frag.glsl"),
             ));
 
-        let pipeline_spec = PipelineSpec { fill_type, vs_path, fs_path };
+        let pipeline_spec = PipelineSpec { fill_type, vs_path, fs_path, depth: true };
 
         // if no mesh is provided, load a cube
         let mesh = self

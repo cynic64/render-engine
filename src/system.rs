@@ -221,6 +221,8 @@ impl<'a> System<'a> {
             println!();
             println!("Collection cache stats:");
             self.collection_cache.print_stats();
+            println!();
+            println!();
         })
     }
 }
