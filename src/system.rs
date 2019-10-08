@@ -7,6 +7,7 @@ use vulkano::framebuffer::{
 use vulkano::image::{AttachmentImage, ImageViewAccess};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::sync::GpuFuture;
+use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -150,13 +151,26 @@ impl<'a> System<'a> {
                     for object in pass_objects.iter() {
                         let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
-                        let collection = self.collection_cache.get(
+                        let mut collection = self.collection_cache.get(
                             &object.pipeline_spec,
                             pipeline.clone(),
                             &pass,
                             &images,
                             &shared_resources,
                         );
+
+                        if let Some(additional_resources) = &object.additional_resources {
+                            let set_idx = collection.len();
+                            let set = Arc::new(
+                                PersistentDescriptorSet::start(pipeline.clone(), set_idx)
+                                    .add_buffer(additional_resources.clone())
+                                    .unwrap()
+                                    .build()
+                                    .unwrap()
+                            );
+
+                            collection.push(set);
+                        }
 
                         cmd_buf_builder = cmd_buf_builder
                             .draw_indexed(
@@ -232,6 +246,7 @@ pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
+    pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 fn create_image_for_desc(

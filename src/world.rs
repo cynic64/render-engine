@@ -9,9 +9,9 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 use crate::mesh_gen;
+use crate::pipeline_cache::PipelineSpec;
 use crate::shaders::relative_path;
 use crate::system::RenderableObject;
-use crate::pipeline_cache::PipelineSpec;
 
 // the world stores objects and can produce a list of renderable objects
 pub struct World {
@@ -46,6 +46,7 @@ pub enum Command {
 pub struct ObjectSpec {
     mesh: Mesh,
     pipeline_spec: PipelineSpec,
+    additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 pub struct Mesh {
@@ -104,6 +105,7 @@ impl World {
             pipeline_spec: spec.pipeline_spec.clone(),
             vbuf,
             ibuf,
+            additional_resources: spec.additional_resources.clone(),
         };
 
         self.objects.insert(id, (spec, object));
@@ -170,6 +172,7 @@ pub struct ObjectSpecBuilder {
     custom_mesh: Option<Mesh>,
     custom_fill_type: Option<PrimitiveTopology>,
     custom_shaders: Option<(PathBuf, PathBuf)>,
+    additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 impl ObjectSpecBuilder {
@@ -178,6 +181,7 @@ impl ObjectSpecBuilder {
             custom_mesh: None,
             custom_fill_type: None,
             custom_shaders: None,
+            additional_resources: None,
         }
     }
 
@@ -202,26 +206,43 @@ impl ObjectSpecBuilder {
         }
     }
 
+    pub fn additional_resources(
+        self,
+        additional_resources: Arc<dyn BufferAccess + Send + Sync>,
+    ) -> Self {
+        Self {
+            additional_resources: Some(additional_resources),
+            ..self
+        }
+    }
+
     pub fn build(self) -> ObjectSpec {
         let fill_type = self
             .custom_fill_type
             .unwrap_or(PrimitiveTopology::TriangleList);
 
         // if you choose to customize shaders, you need to provide both
-        let (vs_path, fs_path) = self
-            .custom_shaders
-            .unwrap_or((
-                relative_path("shaders/forward/default_vert.glsl"),
-                relative_path("shaders/forward/default_frag.glsl"),
-            ));
+        let (vs_path, fs_path) = self.custom_shaders.unwrap_or((
+            relative_path("shaders/forward/default_vert.glsl"),
+            relative_path("shaders/forward/default_frag.glsl"),
+        ));
 
-        let pipeline_spec = PipelineSpec { fill_type, vs_path, fs_path, depth: true };
+        let pipeline_spec = PipelineSpec {
+            fill_type,
+            vs_path,
+            fs_path,
+            depth: true,
+        };
 
         // if no mesh is provided, load a cube
         let mesh = self
             .custom_mesh
             .unwrap_or_else(|| mesh_gen::create_vertices_for_cube([0.0, 0.0, 0.0], 1.0));
 
-        ObjectSpec { mesh, pipeline_spec }
+        ObjectSpec {
+            mesh,
+            pipeline_spec,
+            additional_resources: self.additional_resources,
+        }
     }
 }
