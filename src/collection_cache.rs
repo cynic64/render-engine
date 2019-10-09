@@ -217,7 +217,7 @@ fn pds_for_images(
     }
 }
 
-fn pds_for_buffers(
+pub fn pds_for_buffers(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     buffers: &[Arc<dyn BufferAccess + Send + Sync>],
     set_idx: usize,

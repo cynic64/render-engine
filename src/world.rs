@@ -46,7 +46,7 @@ pub enum Command {
 pub struct ObjectSpec {
     mesh: Mesh,
     pipeline_spec: PipelineSpec,
-    additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
+    additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 pub struct Mesh {
@@ -172,7 +172,7 @@ pub struct ObjectSpecBuilder {
     custom_mesh: Option<Mesh>,
     custom_fill_type: Option<PrimitiveTopology>,
     custom_shaders: Option<(PathBuf, PathBuf)>,
-    additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
+    additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 impl ObjectSpecBuilder {
@@ -181,7 +181,7 @@ impl ObjectSpecBuilder {
             custom_mesh: None,
             custom_fill_type: None,
             custom_shaders: None,
-            additional_resources: None,
+            additional_resources: vec![],
         }
     }
 
@@ -208,10 +208,10 @@ impl ObjectSpecBuilder {
 
     pub fn additional_resources(
         self,
-        additional_resources: Arc<dyn BufferAccess + Send + Sync>,
+        additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
     ) -> Self {
         Self {
-            additional_resources: Some(additional_resources),
+            additional_resources,
             ..self
         }
     }

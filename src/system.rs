@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use crate::mesh_gen;
 use crate::pipeline_cache::{PipelineCache, PipelineSpec};
-use crate::collection_cache::CollectionCache;
+use crate::collection_cache::{CollectionCache, pds_for_buffers};
 use crate::producer::SharedResources;
 use crate::render_passes;
 
@@ -143,7 +143,7 @@ impl<'a> System<'a> {
             // if it's a complex pass use the objects provided for that pass, if
             // it's a simple one use a screen-filling vbuf
 
-            // TODO; rename simple and complex to pixel and geo
+            // TODO; rename simple and complex to fullscreen and geo
             match pass {
                 Pass::Complex { .. } => {
                     let pass_objects = objects[pass.name()].clone();
@@ -159,15 +159,10 @@ impl<'a> System<'a> {
                             &shared_resources,
                         );
 
-                        if let Some(additional_resources) = &object.additional_resources {
+                        // TODO: move this to collection_cache?
+                        if !object.additional_resources.is_empty() {
                             let set_idx = collection.len();
-                            let set = Arc::new(
-                                PersistentDescriptorSet::start(pipeline.clone(), set_idx)
-                                    .add_buffer(additional_resources.clone())
-                                    .unwrap()
-                                    .build()
-                                    .unwrap()
-                            );
+                            let set = pds_for_buffers(pipeline.clone(), &object.additional_resources, set_idx).unwrap();
 
                             collection.push(set);
                         }
@@ -246,7 +241,7 @@ pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
-    pub additional_resources: Option<Arc<dyn BufferAccess + Send + Sync>>,
+    pub additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
 }
 
 fn create_image_for_desc(
