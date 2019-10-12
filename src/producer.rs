@@ -44,6 +44,9 @@ impl ProducerCollection {
         }
     }
 
+    // TODO: instead of taking a vec of boxes, a generic could be taken that
+    // impleneted a trait (say, producerlist) which was implemented for Vec<T>
+    // for T implement ImageProducer or BufferProducer
     pub fn set_image_producers(&mut self, new_image_producers: Vec<Box<dyn ImageProducer>>) {
         self.image_producers = new_image_producers;
     }
