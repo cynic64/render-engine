@@ -67,12 +67,16 @@ pub fn load_obj(path: &Path) -> Result<Mesh, Error> {
             let x: f32 = pieces[1].parse().expect("Corrupt OBJ file");
             let y: f32 = pieces[2].parse().expect("Corrupt OBJ file");
             let z: f32 = pieces[3].parse().expect("Corrupt OBJ file");
-            vertices.push([x, y * -1.0, z]);
+            vertices.push([x, y, z]);
         } else if line.starts_with("vn ") {
             let pieces: Vec<_> = line.split_whitespace().collect();
-            let x: f32 = pieces[1].parse().expect("Corrupt OBJ file");
-            let y: f32 = pieces[2].parse().expect("Corrupt OBJ file");
-            let z: f32 = pieces[3].parse().expect("Corrupt OBJ file");
+            if let Ok(_) = pieces[1].parse::<f32>() {
+            } else {
+                dbg![&pieces];
+            }
+            let x: f32 = pieces[1].parse().unwrap_or(0.577);
+            let y: f32 = pieces[2].parse().unwrap_or(0.577);
+            let z: f32 = pieces[3].parse().unwrap_or(0.577);
             normals.push([x, y * 1.0, z]);
         } else if line.starts_with("f ") {
             let pieces: Vec<_> = line.split_whitespace().collect();

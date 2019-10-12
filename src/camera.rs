@@ -67,7 +67,7 @@ impl BufferProducer for OrbitCamera {
         let x = frame_info.mouse_movement[0];
         let y = frame_info.mouse_movement[1];
 
-        self.pitch += y * self.mouse_sens;
+        self.pitch -= y * self.mouse_sens;
         self.yaw += x * self.mouse_sens;
         let halfpi = std::f32::consts::PI / 2.0;
         let margin = 0.01;
@@ -99,14 +99,18 @@ impl BufferProducer for OrbitCamera {
 
         let dims = frame_info.dimensions;
         let aspect_ratio = (dims[0] as f32) / (dims[1] as f32);
-        self.proj_mat = perspective(
-            aspect_ratio,
-            // fov
-            1.0,
-            // near
-            0.1,
-            // far
-            100_000_000.,
+        // TODO: idk why i have to flip it vertically
+        self.proj_mat = scale(
+            &perspective(
+                aspect_ratio,
+                // fov
+                1.0,
+                // near
+                0.1,
+                // far
+                100_000_000.,
+            ),
+            &vec3(1.0, -1.0, 1.0),
         )
         .into();
     }
