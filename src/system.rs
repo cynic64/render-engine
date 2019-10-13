@@ -420,5 +420,6 @@ vulkano::impl_vertex!(SimpleVertex, position);
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
+    pub tex_coord: [f32; 2],
 }
 vulkano::impl_vertex!(Vertex, position, normal);

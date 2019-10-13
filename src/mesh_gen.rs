@@ -15,36 +15,36 @@ use crate::world::Mesh;
 const CUBE_CORNER_POSITIONS: [[f32; 3]; 8] = [ [-1.0, -1.0, -1.0], [ 1.0, -1.0, -1.0], [ 1.0,  1.0, -1.0], [-1.0,  1.0, -1.0], [-1.0, -1.0,  1.0], [ 1.0, -1.0,  1.0], [ 1.0,  1.0,  1.0], [-1.0,  1.0,  1.0], ];
 
 #[rustfmt::skip]
-const CUBE_VERTICES: [Vertex; 36] = [ Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [1.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [1.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [1.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [1.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [1.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [1.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [-1.0, 0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [-1.0, 0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [-1.0, 0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [-1.0, 0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [-1.0, 0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [-1.0, 0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 1.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 1.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 1.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 1.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 1.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 1.0, 1.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, -1.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, -1.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, -1.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, -1.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, -1.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, -1.0, 0.0] }, ];
+const CUBE_VERTICES: [Vertex; 36] = [ Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [1.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [1.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [1.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [1.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [1.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [1.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [-1.0, 0.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [-1.0, 0.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [-1.0, 0.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [-1.0, 0.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [-1.0, 0.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [-1.0, 0.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 1.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 1.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 1.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 1.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 1.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 1.0, 1.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, -1.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, -1.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, -1.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, -1.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, -1.0, 0.0] , tex_coord: [0.0, 0.0] }, Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, -1.0, 0.0] , tex_coord: [0.0, 0.0] }, ];
 
 #[rustfmt::skip]
 // normals are all 1 because they don't matter with lines
 // const CUBE_EDGE_VERTICES: [Vertex; 24] = [0, 4, 0, 1, 0, 3];
 const CUBE_EDGE_VERTICES: [Vertex; 24] = [
-    Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, -1.0] },
-    Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, -1.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[0], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[3], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[1], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[2], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[5], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[6], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[4], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
+    Vertex { position: CUBE_CORNER_POSITIONS[7], normal: [0.0, 0.0, -1.0] , tex_coord: [0.0, 0.0] },
 ];
 
 pub fn load_obj(path: &Path) -> Result<Mesh, Error> {
@@ -117,6 +117,7 @@ pub fn load_obj(path: &Path) -> Result<Mesh, Error> {
         .map(|(idx, v)| Vertex {
             position: *v,
             normal: normals[vertices_with_normal_indices[idx]],
+            tex_coord: [0.0, 0.0],
         })
         .collect();
 
@@ -142,6 +143,7 @@ pub fn create_vertices_for_cube(center_position: [f32; 3], radius: f32) -> Mesh 
                 vertex.position[2] * radius + center_position[2],
             ],
             normal: vertex.normal,
+            tex_coord: [0.0, 0.0]
         })
         .collect();
     let indices: Vec<u32> = (0..36).collect();
@@ -162,6 +164,7 @@ pub fn create_vertices_for_cube_edges(center_position: [f32; 3], radius: f32) ->
                 vertex.position[2] * radius + center_position[2],
             ],
             normal: vertex.normal,
+            tex_coord: [0.0, 0.0],
         })
         .collect();
 
