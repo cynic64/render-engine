@@ -2,11 +2,8 @@
 
 pub mod system;
 
-pub mod camera;
-pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
-
-// TODO: organize this whole file better
-pub mod producer;
+// pub mod camera;
+// pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
 
 pub mod pipeline_cache;
 pub mod collection_cache;
