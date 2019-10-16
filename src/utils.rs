@@ -1,9 +1,9 @@
-use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
+use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
 use vulkano::device::Device;
 
 use std::sync::Arc;
 
-pub fn ibuf_from_vec(device: Arc<Device>, slice: &[u32]) -> Arc<CpuAccessibleBuffer<[u32]>>
+pub fn bufferize<T: vulkano::memory::Content + 'static + Send + Sync + Clone>(device: Arc<Device>, slice: &[T]) -> Arc<CpuAccessibleBuffer<[T]>>
 {
     CpuAccessibleBuffer::from_iter(device, BufferUsage::all(), slice.iter().cloned()).unwrap()
 }

@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use crate::input::get_elapsed;
 use crate::pipeline_cache::PipelineSpec;
-use crate::producer::SharedResources;
 use crate::system::Pass;
 
 pub struct CollectionCache {
@@ -22,7 +21,6 @@ pub struct CollectionCache {
 
 struct CachedCollection {
     spec: PipelineSpec,
-    custom_resource_tags: Vec<String>,
     collection: Collection,
 }
 
@@ -68,19 +66,15 @@ impl CollectionCache {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         pass: &Pass,
         images: &HashMap<&str, Arc<dyn ImageViewAccess + Send + Sync>>,
-        shared_resources: &SharedResources,
-        custom_resource_tags: &[String],
     ) -> Collection {
         let mut collection = None;
 
         for c_collection in self.c_collections.iter() {
-            if c_collection.spec == *spec && c_collection.custom_resource_tags == custom_resource_tags {
+            if c_collection.spec == *spec {
                 collection = Some(c_collection.collection.clone());
                 self.stats.hits += 1;
             }
         }
-
-        let custom_resource_tags_str: Vec<&str> = custom_resource_tags.iter().map(|x| x.as_str()).collect();
 
         match collection {
             Some(collection) => collection,
@@ -90,7 +84,7 @@ impl CollectionCache {
                 let start_time = std::time::Instant::now();
 
                 let images_needed: Vec<Arc<dyn ImageViewAccess + Send + Sync>> = pass
-                    .images_needed_tags()
+                    .images_needed_tags
                     .iter()
                     .map(|tag| {
                         images
@@ -100,29 +94,14 @@ impl CollectionCache {
                     })
                     .collect();
 
-                let buffers_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
-                    .buffers_needed_tags()
-                    .iter()
-                    .chain(&custom_resource_tags_str)
-                    .map(|tag| {
-                        shared_resources
-                            .buffers
-                            .get(tag)
-                            .expect("missing key when getting resource")
-                            .clone()
-                    })
-                    .collect();
-
-                let collection = collection_from_resources(
+                let collection = collection_from_images(
                     self.sampler.clone(),
                     pipeline.clone(),
                     &images_needed,
-                    &buffers_needed,
                 );
 
                 let c_collection = CachedCollection {
                     spec: spec.clone(),
-                    custom_resource_tags: custom_resource_tags.to_vec(),
                     collection: collection.clone(),
                 };
                 self.c_collections.push(c_collection);
@@ -150,28 +129,16 @@ impl CollectionCache {
     }
 }
 
-fn collection_from_resources(
+// TODO: this is kinda obsolete now
+fn collection_from_images(
     sampler: Arc<Sampler>,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     images: &[Arc<dyn ImageViewAccess + Send + Sync>],
-    buffers: &[Arc<dyn BufferAccess + Send + Sync>],
 ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
-    let resource_set_idx = if images.len() >= 1 { 1 } else { 0 };
-
-    let image_set = pds_for_images(sampler, pipeline.clone(), &images);
-
-    let resource_set = pds_for_buffers(pipeline.clone(), &buffers, resource_set_idx);
-
-    // either no images and no buffers were needed, or images but no buffers, or
-    // buffers but no images, or buffers and images. this handles every case and
-    // converts each into a vector of just the needed resources
-    match (image_set, resource_set) {
-        (None, None) => vec![],
-        (Some(real_image_set), None) => vec![real_image_set.clone()],
-        (None, Some(real_resource_set)) => vec![real_resource_set.clone()],
-        (Some(real_image_set), Some(real_resource_set)) => {
-            vec![real_image_set.clone(), real_resource_set.clone()]
-        }
+    if let Some(image_set) = pds_for_images(sampler, pipeline.clone(), &images) {
+        vec![image_set]
+    } else {
+        vec![]
     }
 }
 

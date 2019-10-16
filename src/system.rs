@@ -11,18 +11,13 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::mesh_gen;
-use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 use crate::collection_cache::CollectionCache;
-use crate::producer::SharedResources;
-use crate::render_passes;
+use crate::pipeline_cache::{PipelineCache, PipelineSpec};
+use crate::render_passes::clear_values_for_pass;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
 // it'll work?
-// maybe also make it so that one component changes, all the others are forced
-// to update too. Because if a producer is added, the shaders -will- have to
-// change.
 
 // A system is a list of passes that takes a bunch of data and produces a frame
 // for it.
@@ -31,54 +26,36 @@ pub struct System<'a> {
     pipeline_caches: Vec<PipelineCache>,
     collection_cache: CollectionCache,
     // stores the vbuf of the screen-filling square used for non-geometry passes
-    simple_vbuf: Arc<dyn BufferAccess + Send + Sync>,
-    simple_ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     output_tag: &'a str,
 }
 
-// A pass is a single operation carried out by a vertex shader and fragment
-// shader combination. For example: a geometry pass to draw some objects in 3D
-// space it would only have the 'MVP' need, because it wouldn't need any other
-// images (like a G-buffer or something similar) Another example: a lighting
-// pass taking something previously rendered into a G-buffer. It would have a
-// need of 'albedo', 'normal', 'position', or whatever you called the images
-// when you created them in a geometry pass.
-//
-// When used in a system, the system will create all the necessary images first,
-//   and add the needed images to a uniform buffer
+// In the end all GPU programs come down to feeding a set of shaders some data
+// and getting some data back. Vertex take geometry and rasterize it, the output
+// of which is stored in an image. If there are multiple outputs from the vertex
+// shader, for example color and normal, 2 images will be created. The fragment
+// shader then reads from these images to determine the final output color for
+// each pixel on the screen. Compute shaders are another story.
 
-// Simple means the system will create a square that fills the screen and run
-// the shaders on that. Complex is what you'd use for rendering the actual
-// geometry, providing your own objects.
-pub enum Pass<'a> {
-    Complex {
-        name: &'a str,
-        images_created: Vec<&'a str>,
-        images_needed: Vec<&'a str>,
-        buffers_needed: Vec<&'a str>,
-        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-    },
-    Simple {
-        name: &'a str,
-        images_created: Vec<&'a str>,
-        images_needed: Vec<&'a str>,
-        buffers_needed: Vec<&'a str>,
-        render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-        // because no objects are passed to a Simple Pass, the pipeline is set
-        // for the whole pass instead of individual objects
-        // the shaders are included in the pipeline, so they are also part of
-        // this
-        pipeline_spec: PipelineSpec,
-    },
+// Passes specify which images the vertex shaders to write to and the fragment
+// shaders read from. This does NOT mean textures! Data you want to feed your
+// shaders from the CPU, whether in the form of buffers or images, should go in
+// Object's images and buffers fields. The images listed in images_needed will
+// be fed to the vertex shader of every object drawn.
+
+// Often drawing a frame requires multiple vertex and fragment shaders operating
+// in sequence. This what System is for.
+pub struct Pass<'a> {
+    pub name: &'a str,
+    pub images_created_tags: Vec<&'a str>,
+    pub images_needed_tags: Vec<&'a str>,
+    pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
 }
 
 impl<'a> System<'a> {
     pub fn new(queue: Arc<Queue>, passes: Vec<Pass<'a>>, output_tag: &'a str) -> Self {
         let device = queue.device().clone();
-
-        let (simple_vbuf, simple_ibuf) = mesh_gen::create_buffers_for_screen_square(device.clone());
 
         let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
         let collection_cache = CollectionCache::new(device.clone());
@@ -87,8 +64,6 @@ impl<'a> System<'a> {
             passes,
             pipeline_caches,
             collection_cache,
-            simple_vbuf,
-            simple_ibuf,
             device,
             queue,
             output_tag,
@@ -99,7 +74,6 @@ impl<'a> System<'a> {
         &mut self,
         dimensions: [u32; 2],
         objects: HashMap<&str, Vec<RenderableObject>>,
-        shared_resources: SharedResources,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
     ) -> Box<dyn GpuFuture>
@@ -118,11 +92,6 @@ impl<'a> System<'a> {
 
         let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
 
-        // add all images not produced by passes
-        for (image_tag, image) in shared_resources.images.iter() {
-            images.insert(image_tag, image.clone());
-        }
-
         // create the command buffer
         let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
             self.device.clone(),
@@ -133,71 +102,40 @@ impl<'a> System<'a> {
         for (pass_idx, pass) in self.passes.iter().enumerate() {
             let framebuffer = framebuffers[pass_idx].clone();
 
-            let clear_values = render_passes::clear_values_for_pass(pass.get_render_pass().clone());
+            let clear_values = clear_values_for_pass(pass.render_pass.clone());
 
             cmd_buf_builder = cmd_buf_builder
                 .begin_render_pass(framebuffer, false, clear_values)
                 .unwrap();
 
-            // if it's a complex pass use the objects provided for that pass, if
-            // it's a simple one use a screen-filling vbuf
+            let pass_objects = objects[pass.name].clone();
 
-            // TODO; rename simple and complex to fullscreen and geo
-            match pass {
-                Pass::Complex { .. } => {
-                    let pass_objects = objects[pass.name()].clone();
+            for object in pass_objects.iter() {
+                let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
-                    for object in pass_objects.iter() {
-                        let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
+                // only stores the images that are fed to every object, not
+                // object-specific images and buffers.
+                let collection = self.collection_cache.get(
+                    &object.pipeline_spec,
+                    pipeline.clone(),
+                    &pass,
+                    &images,
+                );
 
-                        let collection = self.collection_cache.get(
-                            &object.pipeline_spec,
-                            pipeline.clone(),
-                            &pass,
-                            &images,
-                            &shared_resources,
-                            &object.custom_resource_tags,
-                        );
-
-                        cmd_buf_builder = cmd_buf_builder
-                            .draw_indexed(
-                                pipeline,
-                                &dynamic_state,
-                                vec![object.vbuf.clone()],
-                                object.ibuf.clone(),
-                                collection,
-                                (),
-                            )
-                            .unwrap();
-                    }
-                }
-                Pass::Simple { pipeline_spec, .. } => {
-                    let pipeline = self.pipeline_caches[pass_idx].get(&pipeline_spec);
-
-                    let collection = self.collection_cache.get(
-                        &pipeline_spec,
-                        pipeline.clone(),
-                        &pass,
-                        &images,
-                        &shared_resources,
-                        &[],        // no custom resources supported for fullscreen passes yet
-                    );
-
-                    cmd_buf_builder = cmd_buf_builder
-                        .draw_indexed(
-                            pipeline.clone(),
-                            &dynamic_state,
-                            vec![self.simple_vbuf.clone()],
-                            self.simple_ibuf.clone(),
-                            collection,
-                            (),
-                        )
-                        .unwrap();
-                }
-            };
-
-            cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
+                cmd_buf_builder = cmd_buf_builder
+                    .draw_indexed(
+                        pipeline,
+                        &dynamic_state,
+                        vec![object.vbuf.clone()],
+                        object.ibuf.clone(),
+                        collection,
+                        (),
+                    )
+                    .unwrap();
+            }
         }
+
+        cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
 
         // uniforms usualy change between frames, no point caching them between
         // frames
@@ -218,7 +156,7 @@ impl<'a> System<'a> {
 
     pub fn print_stats(&self) {
         (0..self.passes.len()).for_each(|idx| {
-            println!("Pipeline cache stats for pass {}:", self.passes[idx].name());
+            println!("Pipeline cache stats for pass {}:", self.passes[idx].name);
             self.pipeline_caches[idx].print_stats();
             println!();
             println!("Collection cache stats:");
@@ -229,27 +167,11 @@ impl<'a> System<'a> {
     }
 }
 
-// How custom_resources works:
-
-// Sometimes, all objects within a pipeline need the same resources, for example
-// the camera matrices. This is what buffers_needed and images_needed within a
-// Pass struct are for: images and buffers that every draw call will need and
-// can be shared between them.
-
-// Sometimes, however, different objects need different uniforms, for example
-// the model matrix. This what custom resources for: a list of tags that
-// correspond to resources in SharedResources, specific to each object. This
-// does mean you'll have to upload each buffer you use to SharedResources first.
-
-// TODO: there has to be a better solution to resource management. A single
-// misnamed string and the whole program crashes, without being able to easily
-// figure out why.
 #[derive(Clone)]
 pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
-    pub custom_resource_tags: Vec<String>,
 }
 
 fn create_image_for_desc(
@@ -335,9 +257,9 @@ fn images_for_passes<'a>(
     // that image with the real one afterwards.
     let mut images = HashMap::new();
     for pass in passes.iter() {
-        for (image_idx, &image_tag) in pass.images_created_tags().iter().enumerate() {
+        for (image_idx, &image_tag) in pass.images_created_tags.iter().enumerate() {
             let desc = pass
-                .get_render_pass()
+                .render_pass
                 .attachment_desc(image_idx)
                 .expect("Couldn't get the attachment description when creating images for passes");
             let image = create_image_for_desc(device.clone(), dimensions, desc);
@@ -355,7 +277,7 @@ fn framebuffers_for_passes<'a>(
     let mut framebuffers = vec![];
 
     for pass in passes.iter() {
-        let images_tags_created = pass.images_created_tags();
+        let images_tags_created = &pass.images_created_tags;
         let images = images_tags_created
             .iter()
             .map(|tag| {
@@ -366,54 +288,17 @@ fn framebuffers_for_passes<'a>(
             })
             .collect();
 
-        let framebuffer = fb_from_images(pass.get_render_pass(), images);
+        let framebuffer = fb_from_images(pass.render_pass.clone(), images);
         framebuffers.push(framebuffer);
     }
 
     framebuffers
 }
 
-impl<'a> Pass<'a> {
-    pub fn name(&self) -> &str {
-        match self {
-            Pass::Complex { name, .. } => name,
-            Pass::Simple { name, .. } => name,
-        }
-    }
-
-    pub fn images_created_tags(&self) -> &[&str] {
-        match self {
-            Pass::Complex { images_created, .. } => images_created,
-            Pass::Simple { images_created, .. } => images_created,
-        }
-    }
-
-    pub fn images_needed_tags(&self) -> &[&str] {
-        match self {
-            Pass::Complex { images_needed, .. } => images_needed,
-            Pass::Simple { images_needed, .. } => images_needed,
-        }
-    }
-
-    pub fn get_render_pass(&self) -> Arc<dyn RenderPassAbstract + Send + Sync> {
-        match self {
-            Pass::Complex { render_pass, .. } => render_pass.clone(),
-            Pass::Simple { render_pass, .. } => render_pass.clone(),
-        }
-    }
-
-    pub fn buffers_needed_tags(&self) -> &[&str] {
-        match self {
-            Pass::Complex { buffers_needed, .. } => buffers_needed,
-            Pass::Simple { buffers_needed, .. } => buffers_needed,
-        }
-    }
-}
-
 fn pipe_caches_for_passes(device: Arc<Device>, passes: &[Pass]) -> Vec<PipelineCache> {
     passes
         .iter()
-        .map(|pass| PipelineCache::new(device.clone(), pass.get_render_pass()))
+        .map(|pass| PipelineCache::new(device.clone(), pass.render_pass.clone()))
         .collect()
 }
 
