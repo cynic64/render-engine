@@ -22,6 +22,7 @@ pub struct CollectionCache {
 
 struct CachedCollection {
     spec: PipelineSpec,
+    custom_resource_tags: Vec<String>,
     collection: Collection,
 }
 
@@ -58,6 +59,9 @@ impl CollectionCache {
 
     // TODO: replace with a struct that defines a uniform buffer: what spec
     // pipeline is belongs to, what resources it needs, etc.
+
+    // important to remember: 'images' are written to then read later, whereas
+    // resources are meant to be read only.
     pub fn get(
         &mut self,
         spec: &PipelineSpec,
@@ -65,15 +69,18 @@ impl CollectionCache {
         pass: &Pass,
         images: &HashMap<&str, Arc<dyn ImageViewAccess + Send + Sync>>,
         shared_resources: &SharedResources,
+        custom_resource_tags: &[String],
     ) -> Collection {
         let mut collection = None;
 
         for c_collection in self.c_collections.iter() {
-            if c_collection.spec == *spec {
+            if c_collection.spec == *spec && c_collection.custom_resource_tags == custom_resource_tags {
                 collection = Some(c_collection.collection.clone());
                 self.stats.hits += 1;
             }
         }
+
+        let custom_resource_tags_str: Vec<&str> = custom_resource_tags.iter().map(|x| x.as_str()).collect();
 
         match collection {
             Some(collection) => collection,
@@ -96,6 +103,7 @@ impl CollectionCache {
                 let buffers_needed: Vec<Arc<dyn BufferAccess + Send + Sync>> = pass
                     .buffers_needed_tags()
                     .iter()
+                    .chain(&custom_resource_tags_str)
                     .map(|tag| {
                         shared_resources
                             .buffers
@@ -114,6 +122,7 @@ impl CollectionCache {
 
                 let c_collection = CachedCollection {
                     spec: spec.clone(),
+                    custom_resource_tags: custom_resource_tags.to_vec(),
                     collection: collection.clone(),
                 };
                 self.c_collections.push(c_collection);

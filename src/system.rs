@@ -7,14 +7,13 @@ use vulkano::framebuffer::{
 use vulkano::image::{AttachmentImage, ImageViewAccess};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::sync::GpuFuture;
-use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::mesh_gen;
 use crate::pipeline_cache::{PipelineCache, PipelineSpec};
-use crate::collection_cache::{CollectionCache, pds_for_buffers};
+use crate::collection_cache::CollectionCache;
 use crate::producer::SharedResources;
 use crate::render_passes;
 
@@ -151,21 +150,14 @@ impl<'a> System<'a> {
                     for object in pass_objects.iter() {
                         let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
-                        let mut collection = self.collection_cache.get(
+                        let collection = self.collection_cache.get(
                             &object.pipeline_spec,
                             pipeline.clone(),
                             &pass,
                             &images,
                             &shared_resources,
+                            &object.custom_resource_tags,
                         );
-
-                        // TODO: move this to collection_cache?
-                        if !object.additional_resources.is_empty() {
-                            let set_idx = collection.len();
-                            let set = pds_for_buffers(pipeline.clone(), &object.additional_resources, set_idx).unwrap();
-
-                            collection.push(set);
-                        }
 
                         cmd_buf_builder = cmd_buf_builder
                             .draw_indexed(
@@ -188,6 +180,7 @@ impl<'a> System<'a> {
                         &pass,
                         &images,
                         &shared_resources,
+                        &[],        // no custom resources supported for fullscreen passes yet
                     );
 
                     cmd_buf_builder = cmd_buf_builder
@@ -236,12 +229,27 @@ impl<'a> System<'a> {
     }
 }
 
+// How custom_resources works:
+
+// Sometimes, all objects within a pipeline need the same resources, for example
+// the camera matrices. This is what buffers_needed and images_needed within a
+// Pass struct are for: images and buffers that every draw call will need and
+// can be shared between them.
+
+// Sometimes, however, different objects need different uniforms, for example
+// the model matrix. This what custom resources for: a list of tags that
+// correspond to resources in SharedResources, specific to each object. This
+// does mean you'll have to upload each buffer you use to SharedResources first.
+
+// TODO: there has to be a better solution to resource management. A single
+// misnamed string and the whole program crashes, without being able to easily
+// figure out why.
 #[derive(Clone)]
 pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
-    pub additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
+    pub custom_resource_tags: Vec<String>,
 }
 
 fn create_image_for_desc(

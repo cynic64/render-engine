@@ -31,6 +31,7 @@ pub struct WorldCommunicator {
     command_send: Sender<Command>,
 }
 
+// TODO: why not &str?
 pub enum Command {
     AddObjectFromSpec { id: String, spec: ObjectSpec },
     DeleteObject { id: String },
@@ -46,7 +47,7 @@ pub enum Command {
 pub struct ObjectSpec {
     mesh: Mesh,
     pipeline_spec: PipelineSpec,
-    additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
+    custom_resource_tags: Vec<String>,
 }
 
 pub struct Mesh {
@@ -105,7 +106,7 @@ impl World {
             pipeline_spec: spec.pipeline_spec.clone(),
             vbuf,
             ibuf,
-            additional_resources: spec.additional_resources.clone(),
+            custom_resource_tags: spec.custom_resource_tags.clone(),
         };
 
         self.objects.insert(id, (spec, object));
@@ -172,7 +173,7 @@ pub struct ObjectSpecBuilder {
     custom_mesh: Option<Mesh>,
     custom_fill_type: Option<PrimitiveTopology>,
     custom_shaders: Option<(PathBuf, PathBuf)>,
-    additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
+    custom_resource_tags: Vec<String>,
 }
 
 impl ObjectSpecBuilder {
@@ -181,7 +182,7 @@ impl ObjectSpecBuilder {
             custom_mesh: None,
             custom_fill_type: None,
             custom_shaders: None,
-            additional_resources: vec![],
+            custom_resource_tags: vec![],
         }
     }
 
@@ -206,12 +207,12 @@ impl ObjectSpecBuilder {
         }
     }
 
-    pub fn additional_resources(
+    pub fn custom_resources(
         self,
-        additional_resources: Vec<Arc<dyn BufferAccess + Send + Sync>>,
+        custom_resource_tags: Vec<String>,
     ) -> Self {
         Self {
-            additional_resources,
+            custom_resource_tags,
             ..self
         }
     }
@@ -242,7 +243,7 @@ impl ObjectSpecBuilder {
         ObjectSpec {
             mesh,
             pipeline_spec,
-            additional_resources: self.additional_resources,
+            custom_resource_tags: self.custom_resource_tags,
         }
     }
 }
