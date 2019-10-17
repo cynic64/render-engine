@@ -1,4 +1,4 @@
-use vulkano::buffer::{BufferAccess, CpuAccessibleBuffer};
+use vulkano::buffer::{BufferAccess, ImmutableBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
@@ -181,7 +181,7 @@ impl<'a> System<'a> {
 pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
-    pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
+    pub ibuf: Arc<ImmutableBuffer<[u32]>>,
     pub custom_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
 }
 
