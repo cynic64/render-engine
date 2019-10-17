@@ -193,6 +193,7 @@ fn pds_for_images(
     }
 }
 
+// rename to set for buffers? idk
 pub fn pds_for_buffers(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     buffers: &[Arc<dyn BufferAccess + Send + Sync>],
@@ -244,4 +245,4 @@ pub fn pds_for_buffers(
     }
 }
 
-type Collection = Vec<Arc<dyn DescriptorSet + Send + Sync>>;
+pub type Collection = Vec<Arc<dyn DescriptorSet + Send + Sync>>;

@@ -1,11 +1,13 @@
 use vulkano::buffer::{BufferAccess, CpuAccessibleBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
 };
 use vulkano::image::{AttachmentImage, ImageViewAccess};
 use vulkano::pipeline::viewport::Viewport;
+use vulkano::pipeline::GraphicsPipelineAbstract;
 use vulkano::sync::GpuFuture;
 
 use std::collections::HashMap;
@@ -115,12 +117,16 @@ impl<'a> System<'a> {
 
                 // only stores the images that are fed to every object, not
                 // object-specific images and buffers.
-                let collection = self.collection_cache.get(
+                let mut collection = self.collection_cache.get(
                     &object.pipeline_spec,
                     pipeline.clone(),
                     &pass,
                     &images,
                 );
+
+                if let Some(set) = &object.custom_set {
+                    collection.push(set.clone());
+                }
 
                 cmd_buf_builder = cmd_buf_builder
                     .draw_indexed(
@@ -150,6 +156,10 @@ impl<'a> System<'a> {
         )
     }
 
+    pub fn pipeline_for_spec(&mut self, pass_idx: usize, spec: &PipelineSpec) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
+        self.pipeline_caches[pass_idx].get(spec)
+    }
+
     pub fn get_passes(&self) -> &[Pass] {
         &self.passes
     }
@@ -172,6 +182,7 @@ pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<CpuAccessibleBuffer<[u32]>>,
+    pub custom_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
 }
 
 fn create_image_for_desc(
