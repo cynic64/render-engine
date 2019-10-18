@@ -23,7 +23,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new() -> Self {
+    pub fn new() -> (Self, Arc<Queue>) {
         // defaults to a basic render pass
         let instance = get_instance();
         let queue = get_queue(instance.clone());
@@ -51,11 +51,13 @@ impl Window {
             swapchain_caps.clone(),
         );
 
-        Self {
+        let window = Self {
             vk_window,
             event_handler,
-            queue,
-        }
+            queue: queue.clone(),
+        };
+
+        (window, queue)
     }
 
     pub fn present_future<F: GpuFuture + 'static>(&mut self, future: F) {
@@ -99,10 +101,6 @@ impl Window {
     pub fn get_fps(&self) -> f32 {
         // TODO: move fps counting to Window instead of EventHandler
         self.event_handler.get_fps()
-    }
-
-    pub fn get_queue(&self) -> Arc<Queue> {
-        self.queue.clone()
     }
 
     pub fn get_frame_info(&self) -> FrameInfo {

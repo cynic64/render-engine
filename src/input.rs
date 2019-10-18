@@ -40,6 +40,12 @@ impl EventHandler {
         self.last_frame_time = Instant::now();
         self.frames_drawn += 1;
 
+        // if this is our first frame, reset the start time so that loading
+        // times don't affect FPS calculations
+        if self.frames_drawn == 1 {
+            self.start_time = Instant::now();
+        }
+
         self.frame_info.dimensions = dimensions;
         self.collect_events()
     }
