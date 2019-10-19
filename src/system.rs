@@ -34,17 +34,17 @@ pub struct System<'a> {
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
-// and getting some data back. Vertex take geometry and rasterize it, the output
-// of which is stored in an image. If there are multiple outputs from the vertex
-// shader, for example color and normal, 2 images will be created. The fragment
-// shader then reads from these images to determine the final output color for
-// each pixel on the screen. Compute shaders are another story.
+// and getting some data back. Vertex shaders take geometry and rasterize it,
+// the output of which is stored in an image. If there are multiple outputs from
+// the vertex shader, for example color and normal, 2 images will be created.
+// The fragment shader then reads from these images to determine the final
+// output color for each pixel on the screen. Compute shaders are another story.
 
 // Passes specify which images the vertex shaders to write to and the fragment
 // shaders read from. This does NOT mean textures! Data you want to feed your
 // shaders from the CPU, whether in the form of buffers or images, should go in
-// Object's images and buffers fields. The images listed in images_needed will
-// be fed to the vertex shader of every object drawn.
+// Object's custom_set field. The images listed in images_needed will be fed to
+// the vertex shader of every object drawn.
 
 // Often drawing a frame requires multiple vertex and fragment shaders operating
 // in sequence. This what System is for.

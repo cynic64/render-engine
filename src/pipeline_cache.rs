@@ -1,13 +1,13 @@
 use vulkano::device::Device;
-use vulkano::framebuffer::{RenderPassAbstract, Subpass};
+use vulkano::framebuffer::RenderPassAbstract;
 use vulkano::pipeline::input_assembly::PrimitiveTopology;
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineAbstract};
+use vulkano::pipeline::GraphicsPipelineAbstract;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::input::get_elapsed;
-use crate::mesh::{SimpleVertex, Vertex};
+use crate::mesh::VertexTypeAbstract;
 use crate::shaders::ShaderSystem;
 
 // pipeline caches are specific to a single render pass.
@@ -31,12 +31,12 @@ struct CacheStats {
     gen_times: Vec<f32>,
 }
 
-#[derive(PartialEq, Clone, Debug)]
 pub struct PipelineSpec {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
     pub depth: bool,
+    pub vtype: Arc<dyn VertexTypeAbstract>,
 }
 
 impl PipelineCache {
@@ -57,6 +57,7 @@ impl PipelineCache {
 
         // first search through cached pipelines to see if we have one with matching spec
         for c_pipe in self.c_pipes.iter() {
+            // TODO: yooooooo fix this fix this fix this
             if c_pipe.spec == *spec {
                 pipeline = Some(c_pipe.pipeline.clone());
                 self.stats.hits += 1;
@@ -69,41 +70,7 @@ impl PipelineCache {
                 self.stats.misses += 1;
                 let start_time = std::time::Instant::now();
 
-                let shader_sys =
-                    ShaderSystem::load_from_file(self.device.clone(), &spec.vs_path, &spec.fs_path);
-
-                let (vs_main, fs_main) = shader_sys.get_entry_points();
-
-                // TODO: right now whether a depth pass is included or not
-                // determines the vertex type. This is dumb. Fix it with dynamic
-                // traits and all that crap I hate.
-                let pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync> = if spec.depth {
-                    Arc::new(
-                        GraphicsPipeline::start()
-                            .vertex_input_single_buffer::<Vertex>()
-                            .vertex_shader(vs_main, ())
-                            .primitive_topology(spec.fill_type)
-                            .viewports_dynamic_scissors_irrelevant(1)
-                            .fragment_shader(fs_main, ())
-                            .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
-                            .depth_stencil_simple_depth()
-                            .build(self.device.clone())
-                            .unwrap(),
-                    )
-                } else {
-                    Arc::new(
-                        GraphicsPipeline::start()
-                            .vertex_input_single_buffer::<SimpleVertex>()
-                            .vertex_shader(vs_main, ())
-                            .primitive_topology(spec.fill_type)
-                            .viewports_dynamic_scissors_irrelevant(1)
-                            .fragment_shader(fs_main, ())
-                            .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
-                            .build(self.device.clone())
-                            .unwrap(),
-                    )
-                };
-
+                let pipeline = spec.concrete(self.device.clone(), self.render_pass.clone());
                 let c_pipe = CachedPipeline {
                     spec: spec.clone(),
                     pipeline: pipeline.clone(),
@@ -127,5 +94,42 @@ impl PipelineCache {
             "Hits: {}, misses: {}, {}%, avg. time taken to gen pipeline: {}",
             self.stats.hits, self.stats.misses, percent, avg
         );
+    }
+}
+
+impl PipelineSpec {
+    pub fn concrete(&self, device: Arc<Device>, render_pass: Arc<dyn RenderPassAbstract + Send + Sync>) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
+        let shader_sys =
+            ShaderSystem::load_from_file(device.clone(), &self.vs_path, &self.fs_path);
+
+        self.vtype.create_pipeline(
+            device,
+            shader_sys,
+            self.fill_type,
+            render_pass,
+            self.depth,
+        )
+    }
+}
+
+impl PartialEq for PipelineSpec {
+    fn eq(&self, other: &Self) -> bool {
+        self.vs_path == other.vs_path
+            && self.fs_path == other.fs_path
+            && self.fill_type == other.fill_type
+            && self.depth == other.depth
+            && self.vtype.is_same(other.vtype.clone())
+    }
+}
+
+impl Clone for PipelineSpec {
+    fn clone(&self) -> Self {
+        PipelineSpec {
+            vs_path: self.vs_path.clone(),
+            fs_path: self.fs_path.clone(),
+            fill_type: self.fill_type,
+            depth: self.depth,
+            vtype: self.vtype.clone(),
+        }
     }
 }
