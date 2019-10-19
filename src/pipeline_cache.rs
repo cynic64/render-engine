@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::input::get_elapsed;
+use crate::mesh::{SimpleVertex, Vertex};
 use crate::shaders::ShaderSystem;
-use crate::system::{Vertex, SimpleVertex};
 
 // pipeline caches are specific to a single render pass.
 pub struct PipelineCache {
@@ -80,15 +80,15 @@ impl PipelineCache {
                 let pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync> = if spec.depth {
                     Arc::new(
                         GraphicsPipeline::start()
-                        .vertex_input_single_buffer::<Vertex>()
-                        .vertex_shader(vs_main, ())
-                        .primitive_topology(spec.fill_type)
-                        .viewports_dynamic_scissors_irrelevant(1)
-                        .fragment_shader(fs_main, ())
-                        .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
-                        .depth_stencil_simple_depth()
-                        .build(self.device.clone())
-                        .unwrap(),
+                            .vertex_input_single_buffer::<Vertex>()
+                            .vertex_shader(vs_main, ())
+                            .primitive_topology(spec.fill_type)
+                            .viewports_dynamic_scissors_irrelevant(1)
+                            .fragment_shader(fs_main, ())
+                            .render_pass(Subpass::from(self.render_pass.clone(), 0).unwrap())
+                            .depth_stencil_simple_depth()
+                            .build(self.device.clone())
+                            .unwrap(),
                     )
                 } else {
                     Arc::new(
@@ -121,7 +121,8 @@ impl PipelineCache {
     pub fn print_stats(&self) {
         let avg: f32 =
             self.stats.gen_times.iter().sum::<f32>() / (self.stats.gen_times.len() as f32);
-        let percent = (self.stats.hits as f32) / ((self.stats.hits + self.stats.misses) as f32) * 100.0;
+        let percent =
+            (self.stats.hits as f32) / ((self.stats.hits + self.stats.misses) as f32) * 100.0;
         println!(
             "Hits: {}, misses: {}, {}%, avg. time taken to gen pipeline: {}",
             self.stats.hits, self.stats.misses, percent, avg

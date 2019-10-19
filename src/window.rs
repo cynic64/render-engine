@@ -1,7 +1,7 @@
 use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::framebuffer::RenderPassAbstract;
-use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::image::SwapchainImage;
+use vulkano::instance::{Instance, PhysicalDevice};
 use vulkano::swapchain::SwapchainAcquireFuture;
 use vulkano::sync::GpuFuture;
 
@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use re_ll::vk_window::VkWindow;
 
-use crate::input::{FrameInfo, EventHandler};
+use crate::input::{EventHandler, FrameInfo};
 use crate::render_passes;
 
 pub struct Window {

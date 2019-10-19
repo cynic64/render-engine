@@ -156,7 +156,11 @@ impl<'a> System<'a> {
         )
     }
 
-    pub fn pipeline_for_spec(&mut self, pass_idx: usize, spec: &PipelineSpec) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
+    pub fn pipeline_for_spec(
+        &mut self,
+        pass_idx: usize,
+        spec: &PipelineSpec,
+    ) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
         self.pipeline_caches[pass_idx].get(spec)
     }
 
@@ -312,18 +316,3 @@ fn pipe_caches_for_passes(device: Arc<Device>, passes: &[Pass]) -> Vec<PipelineC
         .map(|pass| PipelineCache::new(device.clone(), pass.render_pass.clone()))
         .collect()
 }
-
-#[derive(Default, Debug, Clone)]
-pub struct SimpleVertex {
-    pub position: [f32; 2],
-}
-vulkano::impl_vertex!(SimpleVertex, position);
-
-// TODO: maybe rename to vertex3D and move some of these somewhere else?
-#[derive(Default, Debug, Clone)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub tex_coord: [f32; 2],
-}
-vulkano::impl_vertex!(Vertex, position, normal, tex_coord);

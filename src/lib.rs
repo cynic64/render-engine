@@ -5,10 +5,12 @@ pub mod system;
 // pub mod camera;
 // pub use camera::{FlyCamera, OrbitCamera, OrthoCamera};
 
-pub mod pipeline_cache;
 pub mod collection_cache;
+pub mod pipeline_cache;
 
 pub mod input;
+
+pub mod mesh;
 
 pub mod utils;
 

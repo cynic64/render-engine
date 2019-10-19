@@ -94,11 +94,8 @@ impl CollectionCache {
                     })
                     .collect();
 
-                let collection = collection_from_images(
-                    self.sampler.clone(),
-                    pipeline.clone(),
-                    &images_needed,
-                );
+                let collection =
+                    collection_from_images(self.sampler.clone(), pipeline.clone(), &images_needed);
 
                 let c_collection = CachedCollection {
                     spec: spec.clone(),
