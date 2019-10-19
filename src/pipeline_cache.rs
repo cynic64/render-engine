@@ -118,7 +118,6 @@ impl PartialEq for PipelineSpec {
             && self.fs_path == other.fs_path
             && self.fill_type == other.fill_type
             && self.depth == other.depth
-            && self.vtype.is_same(other.vtype.clone())
     }
 }
 

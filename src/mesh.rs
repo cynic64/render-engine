@@ -121,10 +121,6 @@ pub trait VertexTypeAbstract: Any {
     ) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync>;
 
     fn clone(&self) -> Arc<dyn VertexTypeAbstract>;
-
-    fn is_same(&self, other: Arc<dyn VertexTypeAbstract>) -> bool {
-        self.type_id() == other.type_id()
-    }
 }
 
 impl<V: Vertex + Send + Sync + Clone + 'static> VertexTypeAbstract for VertexType<V> {
