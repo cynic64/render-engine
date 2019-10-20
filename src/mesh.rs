@@ -16,14 +16,14 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 use std::any::Any;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct SimpleVertex3D {
     pub position: [f32; 2],
 }
 vulkano::impl_vertex!(SimpleVertex3D, position);
 
 // TODO: maybe rename to PosNormTex?
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Vertex3D {
     pub position: [f32; 3],
     pub normal: [f32; 3],
@@ -80,6 +80,8 @@ impl Default for ObjectSpec {
     }
 }
 
+// TODO: instead of having arc<dyn vertexlist>, give mesh a type parameter and
+// create a MeshAbstract type.
 pub struct Mesh {
     pub vertices: Arc<dyn VertexList>,
     pub indices: Vec<u32>,
