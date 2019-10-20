@@ -36,7 +36,7 @@ pub struct PipelineSpec {
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
     pub depth: bool,
-    pub vtype: Arc<dyn VertexTypeAbstract>,
+    pub vtype: Arc<dyn VertexTypeAbstract>
 }
 
 impl PipelineCache {

@@ -1,10 +1,9 @@
 use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::pipeline::input_assembly::PrimitiveTopology;
-use vulkano::buffer::BufferAccess;
+use vulkano::buffer::{ImmutableBuffer, BufferAccess};
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::{GraphicsPipelineAbstract, GraphicsPipeline};
-use vulkano::pipeline::vertex::Vertex;
 
 use crate::pipeline_cache::PipelineSpec;
 use crate::system::RenderableObject;
@@ -31,27 +30,27 @@ pub struct Vertex3D {
 }
 vulkano::impl_vertex!(Vertex3D, position, normal, tex_coord);
 
-pub struct ObjectSpec {
+pub struct ObjectSpec<V: Vertex> {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
-    pub mesh: Mesh,
+    pub mesh: Mesh<V>,
     pub custom_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
     pub depth_buffer: bool,
     pub fill_type: PrimitiveTopology,
 }
 
-impl ObjectSpec {
+impl<V: Vertex> ObjectSpec<V> {
     pub fn build(self, queue: Arc<Queue>) -> RenderableObject {
         let pipeline_spec = PipelineSpec {
             vs_path: self.vs_path,
             fs_path: self.fs_path,
             fill_type: self.fill_type,
             depth: self.depth_buffer,
-            vtype: self.mesh.vertices.get_vtype(),
+            vtype: self.mesh.get_vtype(),
         };
 
-        let vbuf = self.mesh.vertices.bufferize(queue.clone());
-        let ibuf = bufferize_slice(queue.clone(), &self.mesh.indices);
+        let vbuf = self.mesh.get_vbuf(queue.clone());
+        let ibuf = self.mesh.get_ibuf(queue.clone());
 
         RenderableObject {
             pipeline_spec,
@@ -62,9 +61,9 @@ impl ObjectSpec {
     }
 }
 
-impl Default for ObjectSpec {
+impl<V: Vertex> Default for ObjectSpec<V> {
     fn default() -> Self {
-        let vertices: Arc<Vec<Vertex3D>> = Arc::new(vec![]);
+        let vertices: Vec<V> = vec![];
 
         Self {
             vs_path: relative_path("shaders/forward/default_vert.glsl"),
@@ -82,27 +81,34 @@ impl Default for ObjectSpec {
 
 // TODO: instead of having arc<dyn vertexlist>, give mesh a type parameter and
 // create a MeshAbstract type.
-pub struct Mesh {
-    pub vertices: Arc<dyn VertexList>,
+pub struct Mesh<V: Vertex> {
+    pub vertices: Vec<V>,
     pub indices: Vec<u32>,
 }
 
-pub trait VertexList {
-    fn bufferize(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync>;
+pub trait Vertex: vulkano::pipeline::vertex::Vertex + Clone {}
+
+impl<V: vulkano::pipeline::vertex::Vertex + Clone> Vertex for V {}
+
+pub trait MeshAbstract {
+    fn get_vbuf(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync>;
+    fn get_ibuf(&self, queue: Arc<Queue>) -> Arc<ImmutableBuffer<[u32]>>;
     fn get_vtype(&self) -> Arc<dyn VertexTypeAbstract>;
 }
 
-impl<V: Vertex + Send + Sync + 'static + Clone> VertexList for Vec<V> {
-    fn bufferize(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
-        bufferize_slice(queue, self)
+impl<V: Vertex> MeshAbstract for Mesh<V> {
+    fn get_vbuf(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
+        bufferize_slice(queue, &self.vertices)
+    }
+
+    fn get_ibuf(&self, queue: Arc<Queue>) -> Arc<ImmutableBuffer<[u32]>> {
+        bufferize_slice(queue, &self.indices)
     }
 
     fn get_vtype(&self) -> Arc<dyn VertexTypeAbstract> {
-        Arc::new(
-            VertexType {
-                phantom: PhantomData::<V>,
-            }
-        )
+        Arc::new(VertexType {
+            phantom: PhantomData::<V>,
+        })
     }
 }
 
