@@ -43,9 +43,6 @@ pub fn load_texture(queue: Arc<Queue>, path: &Path) -> Arc<dyn ImageViewAccess +
         .unwrap()
         .to_rgba();
         let image_data = image.into_raw().clone();
-        for i in 0..20 {
-            println!("{:?}", image_data[i]);
-        }
 
         ImmutableImage::from_iter(
             image_data.iter().cloned(),
