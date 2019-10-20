@@ -5,10 +5,6 @@ use vulkano::image::{Dimensions, ImageViewAccess, ImmutableImage};
 use vulkano::memory::Content;
 use vulkano::sync::GpuFuture;
 
-use image::ImageFormat;
-
-use std::fs::File;
-use std::io::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -32,23 +28,15 @@ pub fn bufferize_data<T: Content + 'static + Send + Sync>(
 
 pub fn load_texture(queue: Arc<Queue>, path: &Path) -> Arc<dyn ImageViewAccess + Send + Sync> {
     let (texture, tex_future) = {
-        let image = image::load_from_memory_with_format(
-            &File::open(path)
-                .unwrap()
-                .bytes()
-                .map(|x| x.unwrap())
-                .collect::<Vec<u8>>(),
-            ImageFormat::PNG,
-        )
-        .unwrap()
-        .to_rgba();
+        let image = image::open(path).unwrap().to_rgba();
+        let (width, height) = image.dimensions();
         let image_data = image.into_raw().clone();
 
         ImmutableImage::from_iter(
             image_data.iter().cloned(),
             Dimensions::Dim2d {
-                width: 1024,
-                height: 1024,
+                width,
+                height,
             },
             Format::R8G8B8A8Unorm,
             queue.clone(),

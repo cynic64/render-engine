@@ -5,7 +5,7 @@ use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
 };
-use vulkano::image::{AttachmentImage, ImageViewAccess};
+use vulkano::image::{AttachmentImage, ImageViewAccess, SwapchainImage};
 use vulkano::pipeline::viewport::Viewport;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 use vulkano::sync::GpuFuture;
@@ -16,6 +16,7 @@ use std::sync::Arc;
 use crate::collection_cache::CollectionCache;
 use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 use crate::render_passes::clear_values_for_pass;
+use crate::window::Window;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -72,7 +73,7 @@ impl<'a> System<'a> {
         }
     }
 
-    pub fn draw_frame<F>(
+    pub fn render<F>(
         &mut self,
         dimensions: [u32; 2],
         objects: HashMap<&str, Vec<RenderableObject>>,
@@ -154,6 +155,21 @@ impl<'a> System<'a> {
                 .then_execute(self.queue.clone(), final_cmd_buf)
                 .unwrap(),
         )
+    }
+
+    pub fn render_to_window(&mut self, window: &mut Window, objects: HashMap<&str, Vec<RenderableObject>>) {
+        let swapchain_image = window.next_image();
+        let swapchain_fut = window.get_future();
+
+        // render returns a future representing the completion of rendering
+        let frame_fut = self.render(
+            SwapchainImage::dimensions(&swapchain_image),
+            objects,
+            swapchain_image,
+            swapchain_fut,
+        );
+
+        window.present_future(frame_fut);
     }
 
     pub fn pipeline_for_spec(
