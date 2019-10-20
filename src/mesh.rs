@@ -16,19 +16,8 @@ use std::marker::PhantomData;
 use std::any::Any;
 
 #[derive(Default, Debug, Clone, Copy)]
-pub struct SimpleVertex3D {
-    pub position: [f32; 2],
-}
-vulkano::impl_vertex!(SimpleVertex3D, position);
-
-// TODO: maybe rename to PosNormTex?
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Vertex3D {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub tex_coord: [f32; 2],
-}
-vulkano::impl_vertex!(Vertex3D, position, normal, tex_coord);
+pub struct Dummy {}
+vulkano::impl_vertex!(Dummy);
 
 pub struct ObjectSpec<V: Vertex> {
     pub vs_path: PathBuf,
