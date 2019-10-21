@@ -26,7 +26,7 @@ pub fn bufferize_data<T: Content + 'static + Send + Sync>(
         .0
 }
 
-pub fn load_texture(queue: Arc<Queue>, path: &Path) -> Arc<dyn ImageViewAccess + Send + Sync> {
+pub fn load_texture(queue: Arc<Queue>, path: &Path, format: Format) -> Arc<dyn ImageViewAccess + Send + Sync> {
     let (texture, tex_future) = {
         let image = image::open(path).unwrap().to_rgba();
         let (width, height) = image.dimensions();
@@ -38,7 +38,7 @@ pub fn load_texture(queue: Arc<Queue>, path: &Path) -> Arc<dyn ImageViewAccess +
                 width,
                 height,
             },
-            Format::R8G8B8A8Unorm,
+            format,
             queue.clone(),
         )
         .unwrap()

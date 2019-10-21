@@ -31,6 +31,7 @@ pub struct System<'a> {
     device: Arc<Device>,
     queue: Arc<Queue>,
     output_tag: &'a str,
+    cached_images: Option<HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>>,
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
@@ -69,6 +70,7 @@ impl<'a> System<'a> {
             device,
             queue,
             output_tag,
+            cached_images: None,
         }
     }
 
@@ -82,15 +84,15 @@ impl<'a> System<'a> {
     where
         F: GpuFuture + 'static,
     {
-        // TODO: change vk_window so you submit an image
 
         // create dynamic state (will be the same for every draw call)
         let dynamic_state = dynamic_state_for_dimensions(dimensions);
 
         // create all images and framebuffers
-        let mut images = images_for_passes(self.device.clone(), dimensions, &self.passes);
+        let mut images = self.get_images(dimensions);
+
         // replace destination image with the real one
-        images.insert(self.output_tag, dest_image);
+        images.insert(self.output_tag.to_string(), dest_image);
 
         let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
 
@@ -186,6 +188,29 @@ impl<'a> System<'a> {
             println!();
         })
     }
+
+    fn get_images(&mut self, dimensions: [u32; 2]) -> HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>> {
+        // gets images to be drawn to either by using cached ones or creating
+        // new ones
+
+        // if there is a cache, make sure its dimensions are the same as what we want
+        if let Some(cached) = &self.cached_images {
+            let cached_vk_dims = cached.values().collect::<Vec<_>>()[0].dimensions();
+            let cached_dimensions = [cached_vk_dims.width(), cached_vk_dims.height()];
+
+            if cached_dimensions != dimensions {
+                self.cached_images = None;
+            }
+        }
+
+        if let Some(cached) = &self.cached_images {
+            cached.clone()
+        } else {
+            let new = images_for_passes(self.device.clone(), dimensions, &self.passes);
+            self.cached_images = Some(new.clone());
+            new
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -273,7 +298,7 @@ fn images_for_passes<'a>(
     device: Arc<Device>,
     dimensions: [u32; 2],
     passes: &'a [Pass],
-) -> HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>> {
+) -> HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>> {
     // for now this ignores the fact that the output image is special and
     // provided from outside System. any users of this function should replace
     // that image with the real one afterwards.
@@ -285,7 +310,7 @@ fn images_for_passes<'a>(
                 .attachment_desc(image_idx)
                 .expect("Couldn't get the attachment description when creating images for passes");
             let image = create_image_for_desc(device.clone(), dimensions, desc);
-            images.insert(image_tag, image);
+            images.insert(image_tag.to_string(), image);
         }
     }
 
@@ -293,7 +318,7 @@ fn images_for_passes<'a>(
 }
 
 fn framebuffers_for_passes<'a>(
-    images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
+    images: HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>,
     passes: &'a [Pass],
 ) -> Vec<Arc<dyn FramebufferAbstract + Send + Sync>> {
     let mut framebuffers = vec![];
@@ -304,7 +329,7 @@ fn framebuffers_for_passes<'a>(
             .iter()
             .map(|tag| {
                 images
-                    .get(tag)
+                    .get(&tag.to_string())
                     .expect("Couldn't get image when creating framebuffers for passes")
                     .clone()
             })

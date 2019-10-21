@@ -65,7 +65,7 @@ impl CollectionCache {
         spec: &PipelineSpec,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         pass: &Pass,
-        images: &HashMap<&str, Arc<dyn ImageViewAccess + Send + Sync>>,
+        images: &HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>,
     ) -> Collection {
         let mut collection = None;
 
@@ -88,7 +88,7 @@ impl CollectionCache {
                     .iter()
                     .map(|tag| {
                         images
-                            .get(tag)
+                            .get(&tag.to_string())
                             .expect("missing key when getting image")
                             .clone()
                     })
@@ -132,29 +132,31 @@ fn collection_from_images(
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     images: &[Arc<dyn ImageViewAccess + Send + Sync>],
 ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
-    if let Some(image_set) = pds_for_images(sampler, pipeline.clone(), &images) {
+    // assumes set idx should be 0
+    if let Some(image_set) = pds_for_images(sampler, pipeline.clone(), &images, 0) {
         vec![image_set]
     } else {
         vec![]
     }
 }
 
-fn pds_for_images(
+pub fn pds_for_images(
     sampler: Arc<Sampler>,
     pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     images: &[Arc<dyn ImageViewAccess + Send + Sync>],
+    set_idx: usize,
 ) -> Option<Arc<dyn DescriptorSet + Send + Sync>> {
     match images.len() {
         0 => None,
         1 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(images[0].clone(), sampler)
                 .unwrap()
                 .build()
                 .unwrap(),
         )),
         2 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(images[0].clone(), sampler.clone())
                 .unwrap()
                 .add_sampled_image(images[1].clone(), sampler.clone())
@@ -163,7 +165,7 @@ fn pds_for_images(
                 .unwrap(),
         )),
         3 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(images[0].clone(), sampler.clone())
                 .unwrap()
                 .add_sampled_image(images[1].clone(), sampler.clone())
@@ -174,7 +176,7 @@ fn pds_for_images(
                 .unwrap(),
         )),
         4 => Some(Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(images[0].clone(), sampler.clone())
                 .unwrap()
                 .add_sampled_image(images[1].clone(), sampler.clone())
