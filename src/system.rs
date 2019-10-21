@@ -7,7 +7,6 @@ use vulkano::framebuffer::{
 };
 use vulkano::image::{AttachmentImage, ImageViewAccess, SwapchainImage};
 use vulkano::pipeline::viewport::Viewport;
-use vulkano::pipeline::GraphicsPipelineAbstract;
 use vulkano::sync::GpuFuture;
 
 use std::collections::HashMap;
@@ -170,14 +169,6 @@ impl<'a> System<'a> {
         );
 
         window.present_future(frame_fut);
-    }
-
-    pub fn pipeline_for_spec(
-        &mut self,
-        pass_idx: usize,
-        spec: &PipelineSpec,
-    ) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
-        self.pipeline_caches[pass_idx].get(spec)
     }
 
     pub fn get_passes(&self) -> &[Pass] {

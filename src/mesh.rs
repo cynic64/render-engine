@@ -70,6 +70,7 @@ impl<V: Vertex> Default for ObjectSpec<V> {
 
 // TODO: instead of having arc<dyn vertexlist>, give mesh a type parameter and
 // create a MeshAbstract type.
+#[derive(Clone)]
 pub struct Mesh<V: Vertex> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,

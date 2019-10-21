@@ -8,7 +8,7 @@ type RenderPass = Arc<dyn RenderPassAbstract + Send + Sync>;
 
 // TODO: let user provide own format for color buffers
 const DEFAULT_COLOR_FORMAT: Format = vulkano::format::Format::B8G8R8A8Unorm;
-const DEFAULT_DEPTH_FORMAT: Format = vulkano::format::Format::D16Unorm;
+const DEFAULT_DEPTH_FORMAT: Format = vulkano::format::Format::D32Sfloat;
 
 pub fn multisampled_with_depth(device: Arc<Device>, factor: u32) -> RenderPass {
     Arc::new(
@@ -113,6 +113,7 @@ pub fn clear_values_for_pass(
                 Format::R32G32B32A32Sfloat => [0.0, 0.0, 0.0, 0.0].into(),
                 Format::R16G16B16A16Sfloat => [0.0, 0.0, 0.0, 0.0].into(),
                 Format::D16Unorm => 1f32.into(),
+                Format::D32Sfloat => 1f32.into(),
                 // TODO: make the panic print the bad format
                 _ => panic!("You provided a format that the clear values couldn't be guessed for!"),
             },
