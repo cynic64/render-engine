@@ -124,7 +124,7 @@ impl<'a> System<'a> {
                     &images,
                 );
 
-                if let Some(set) = &object.custom_set {
+                for set in object.custom_sets.iter() {
                     collection.push(set.clone());
                 }
 
@@ -193,7 +193,7 @@ pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<ImmutableBuffer<[u32]>>,
-    pub custom_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
 }
 
 fn create_image_for_desc(

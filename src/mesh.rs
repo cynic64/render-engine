@@ -23,7 +23,7 @@ pub struct ObjectSpec<V: Vertex> {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub mesh: Mesh<V>,
-    pub custom_set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
     pub depth_buffer: bool,
     pub fill_type: PrimitiveTopology,
 }
@@ -45,7 +45,7 @@ impl<V: Vertex> ObjectSpec<V> {
             pipeline_spec,
             vbuf,
             ibuf,
-            custom_set: self.custom_set,
+            custom_sets: self.custom_sets,
         }
     }
 }
@@ -61,7 +61,7 @@ impl<V: Vertex> Default for ObjectSpec<V> {
                 vertices,
                 indices: vec![],
             },
-            custom_set: None,
+            custom_sets: vec![],
             depth_buffer: false,
             fill_type: PrimitiveTopology::TriangleList,
         }
