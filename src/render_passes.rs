@@ -79,6 +79,27 @@ pub fn with_depth(device: Arc<Device>) -> RenderPass {
     )
 }
 
+pub fn only_depth(device: Arc<Device>) -> RenderPass {
+    Arc::new(
+        vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                depth: {
+                    load: Clear,
+                    store: Store,
+                    format: DEFAULT_DEPTH_FORMAT,
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [],
+                depth_stencil: {depth}
+            }
+        )
+            .unwrap(),
+    )
+}
+
 pub fn basic(device: Arc<Device>) -> RenderPass {
     Arc::new(
         vulkano::single_pass_renderpass!(

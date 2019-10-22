@@ -24,13 +24,13 @@ use crate::window::Window;
 // A system is a list of passes that takes a bunch of data and produces a frame
 // for it.
 pub struct System<'a> {
-    passes: Vec<Pass<'a>>,
+    pub passes: Vec<Pass<'a>>,
     pipeline_caches: Vec<PipelineCache>,
     collection_cache: CollectionCache,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     device: Arc<Device>,
     queue: Arc<Queue>,
-    output_tag: &'a str,
+    pub output_tag: &'a str,
     cached_images: Option<HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>>,
 }
 
