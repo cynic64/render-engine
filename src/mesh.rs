@@ -19,30 +19,20 @@ use std::any::Any;
 pub struct Dummy {}
 vulkano::impl_vertex!(Dummy);
 
-pub struct ObjectSpec<V: Vertex> {
-    pub vs_path: PathBuf,
-    pub fs_path: PathBuf,
+pub struct RenderableObjectSpec<V: Vertex> {
+    pub pipeline_spec: PipelineSpec,
     pub mesh: Mesh<V>,
     pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
-    pub depth_buffer: bool,
-    pub fill_type: PrimitiveTopology,
 }
 
-impl<V: Vertex> ObjectSpec<V> {
+impl<V: Vertex> RenderableObjectSpec<V> {
     pub fn build(self, queue: Arc<Queue>) -> RenderableObject {
-        let pipeline_spec = PipelineSpec {
-            vs_path: self.vs_path,
-            fs_path: self.fs_path,
-            fill_type: self.fill_type,
-            depth: self.depth_buffer,
-            vtype: self.mesh.get_vtype(),
-        };
 
         let vbuf = self.mesh.get_vbuf(queue.clone());
         let ibuf = self.mesh.get_ibuf(queue.clone());
 
         RenderableObject {
-            pipeline_spec,
+            pipeline_spec: self.pipeline_spec,
             vbuf,
             ibuf,
             custom_sets: self.custom_sets,
@@ -50,20 +40,27 @@ impl<V: Vertex> ObjectSpec<V> {
     }
 }
 
-impl<V: Vertex> Default for ObjectSpec<V> {
+impl<V: Vertex> Default for RenderableObjectSpec<V> {
     fn default() -> Self {
         let vertices: Vec<V> = vec![];
 
-        Self {
+        let pipeline_spec = PipelineSpec {
             vs_path: relative_path("shaders/forward/default_vert.glsl"),
+            depth: false,
+            fill_type: PrimitiveTopology::TriangleList,
             fs_path: relative_path("shaders/forward/default_frag.glsl"),
+            vtype: Arc::new(VertexType {
+                phantom: PhantomData::<V>,
+            }),
+        };
+
+        Self {
+            pipeline_spec,
             mesh: Mesh {
                 vertices,
                 indices: vec![],
             },
             custom_sets: vec![],
-            depth_buffer: false,
-            fill_type: PrimitiveTopology::TriangleList,
         }
     }
 }
@@ -105,6 +102,14 @@ impl<V: Vertex> MeshAbstract for Mesh<V> {
 #[derive(Clone)]
 pub struct VertexType<V: Vertex + Send + Sync + Clone> {
     pub phantom: PhantomData<V>,
+}
+
+impl<V: Vertex + Send + Sync + Clone> VertexType<V> {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            phantom: PhantomData::<V>,
+        })
+    }
 }
 
 // TODO: properly implement clone and partialeq
