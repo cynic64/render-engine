@@ -24,7 +24,7 @@ pub struct ShaderSystem {
 
 impl ShaderSystem {
     pub fn load_from_file(device: Arc<Device>, vs_path: &Path, fs_path: &Path) -> Self {
-        let shaders = load(vs_path, fs_path).expect("Couldn't load shaders");
+        let shaders = load(vs_path, fs_path).expect(&format!("Couldn't load shaders: {:?} and {:?}", vs_path, fs_path));
         let entry = parse(&shaders).expect("Couldn't parse shaders");
 
         let vs_module =

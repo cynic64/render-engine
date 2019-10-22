@@ -141,9 +141,10 @@ impl<'a> System<'a> {
                     )
                     .unwrap();
             }
+
+            cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
         }
 
-        cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
 
         // uniforms usualy change between frames, no point caching them between
         // frames
