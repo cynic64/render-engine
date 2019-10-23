@@ -6,6 +6,7 @@ use vulkano::device::{Device, Queue};
 use vulkano::buffer::{ImmutableBuffer, BufferAccess};
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::{GraphicsPipelineAbstract, GraphicsPipeline};
+use vulkano::pipeline::depth_stencil::{DepthStencil, Compare};
 
 use crate::pipeline_cache::PipelineSpec;
 use crate::system::RenderableObject;
@@ -21,7 +22,8 @@ pub struct ObjectPrototype<V: Vertex> {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
-    pub depth_buffer: bool,
+    pub read_depth: bool,
+    pub write_depth: bool,
     pub mesh: Mesh<V>,
     pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
 }
@@ -37,7 +39,8 @@ impl<V: Vertex> ObjectPrototype<V> {
                 vs_path: self.vs_path,
                 fs_path: self.fs_path,
                 fill_type: self.fill_type,
-                depth: self.depth_buffer,
+                read_depth: self.read_depth,
+                write_depth: self.write_depth,
                 vtype: VertexType::<V>::new(),
             },
             vbuf,
@@ -102,7 +105,8 @@ pub trait VertexTypeAbstract: Any {
         shaders: ShaderSystem,
         fill_type: PrimitiveTopology,
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-        depth: bool,
+        read_depth: bool,
+        write_depth: bool,
     ) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync>;
 
     fn clone(&self) -> Arc<dyn VertexTypeAbstract>;
@@ -115,11 +119,13 @@ impl<V: Vertex + Send + Sync + Clone + 'static> VertexTypeAbstract for VertexTyp
         shaders: ShaderSystem,
         fill_type: PrimitiveTopology,
         render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-        depth: bool,
+        read_depth: bool,
+        write_depth: bool,
     ) -> Arc<dyn GraphicsPipelineAbstract + Send + Sync> {
         let (vs_main, fs_main) = shaders.get_entry_points();
 
-        if depth {
+        if !read_depth && !write_depth {
+            // no depth buffer at all
             Arc::new(
                 GraphicsPipeline::start()
                     .vertex_input_single_buffer::<V>()
@@ -128,12 +134,19 @@ impl<V: Vertex + Send + Sync + Clone + 'static> VertexTypeAbstract for VertexTyp
                     .viewports_dynamic_scissors_irrelevant(1)
                     .fragment_shader(fs_main, ())
                     .render_pass(Subpass::from(render_pass, 0).unwrap())
-                    .depth_stencil_simple_depth()
                     .cull_mode_back()
                     .build(device)
                     .unwrap()
             )
         } else {
+            let mut stencil = DepthStencil::disabled();
+            stencil.depth_compare = if read_depth {
+                Compare::LessOrEqual
+            } else {
+                Compare::Always
+            };
+            stencil.depth_write = write_depth;
+
             Arc::new(
                 GraphicsPipeline::start()
                     .vertex_input_single_buffer::<V>()
@@ -141,6 +154,7 @@ impl<V: Vertex + Send + Sync + Clone + 'static> VertexTypeAbstract for VertexTyp
                     .primitive_topology(fill_type)
                     .viewports_dynamic_scissors_irrelevant(1)
                     .fragment_shader(fs_main, ())
+                    .depth_stencil(stencil)
                     .render_pass(Subpass::from(render_pass, 0).unwrap())
                     .cull_mode_back()
                     .build(device)

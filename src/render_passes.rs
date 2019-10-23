@@ -107,6 +107,33 @@ pub fn with_depth(device: Arc<Device>) -> RenderPass {
     )
 }
 
+pub fn read_depth(device: Arc<Device>) -> RenderPass {
+    Arc::new(
+        vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                color: {
+                    load: Clear,
+                    store: Store,
+                    format: DEFAULT_COLOR_FORMAT,
+                    samples: 1,
+                },
+                depth: {
+                    load: Load,
+                    store: Store,
+                    format: DEFAULT_DEPTH_FORMAT,
+                    samples: 1,
+                }
+            },
+            pass: {
+                color: [color],
+                depth_stencil: {depth}
+            }
+        )
+        .unwrap(),
+    )
+}
+
 pub fn only_depth(device: Arc<Device>) -> RenderPass {
     Arc::new(
         vulkano::single_pass_renderpass!(
@@ -124,7 +151,7 @@ pub fn only_depth(device: Arc<Device>) -> RenderPass {
                 depth_stencil: {depth}
             }
         )
-            .unwrap(),
+        .unwrap(),
     )
 }
 
@@ -167,7 +194,7 @@ pub fn clear_values_for_pass(
                 _ => panic!("You provided a format that the clear values couldn't be guessed for!"),
             },
             LoadOp::DontCare => ClearValue::None,
-            _ => panic!("Guessing clear values for Load attachments is unsupported"),
+            LoadOp::Load => ClearValue::None,
         })
         .collect()
 }

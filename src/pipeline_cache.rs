@@ -36,7 +36,8 @@ pub struct PipelineSpec {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
-    pub depth: bool,
+    pub read_depth: bool,
+    pub write_depth: bool,
     pub vtype: Arc<dyn VertexTypeAbstract>
 }
 
@@ -108,7 +109,8 @@ impl PipelineSpec {
             shader_sys,
             self.fill_type,
             render_pass,
-            self.depth,
+            self.read_depth,
+            self.write_depth,
         )
     }
 }
@@ -118,7 +120,8 @@ impl PartialEq for PipelineSpec {
         self.vs_path == other.vs_path
             && self.fs_path == other.fs_path
             && self.fill_type == other.fill_type
-            && self.depth == other.depth
+            && self.read_depth == other.read_depth
+            && self.write_depth == other.write_depth
     }
 }
 
@@ -128,7 +131,8 @@ impl Clone for PipelineSpec {
             vs_path: self.vs_path.clone(),
             fs_path: self.fs_path.clone(),
             fill_type: self.fill_type,
-            depth: self.depth,
+            read_depth: self.read_depth,
+            write_depth: self.write_depth,
             vtype: self.vtype.clone(),
         }
     }
