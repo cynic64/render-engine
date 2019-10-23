@@ -19,3 +19,12 @@ pub mod window;
 pub mod shaders;
 
 pub mod render_passes;
+
+// re-exports of vulkano's stuff
+use std::sync::Arc;
+pub type RenderPass = Arc<dyn vulkano::framebuffer::RenderPassAbstract + Send + Sync>;
+pub type GraphicsPipeline = Arc<dyn vulkano::pipeline::GraphicsPipelineAbstract + Send + Sync>;
+pub type Device = Arc<vulkano::device::Device>;
+pub type Queue = Arc<vulkano::device::Queue>;
+pub type Buffer = Arc<dyn vulkano::buffer::BufferAccess + Send + Sync>;
+pub use vulkano::format::Format;
