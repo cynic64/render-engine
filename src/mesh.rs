@@ -157,7 +157,3 @@ impl<V: Vertex + Send + Sync + Clone + 'static> VertexTypeAbstract for VertexTyp
         )
     }
 }
-
-fn relative_path(local_path: &str) -> PathBuf {
-    [env!("CARGO_MANIFEST_DIR"), local_path].iter().collect()
-}
