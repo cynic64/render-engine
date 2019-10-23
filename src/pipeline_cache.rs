@@ -31,6 +31,7 @@ struct CacheStats {
     gen_times: Vec<f32>,
 }
 
+// TODO: rename to pipeline_prototype or something more accurate.
 pub struct PipelineSpec {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,

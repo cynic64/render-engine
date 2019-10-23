@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 use std::any::Any;
 
-pub struct RenderableObjectSpec<V: Vertex> {
+pub struct ObjectPrototype<V: Vertex> {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
@@ -26,8 +26,8 @@ pub struct RenderableObjectSpec<V: Vertex> {
     pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
 }
 
-impl<V: Vertex> RenderableObjectSpec<V> {
-    pub fn build(self, queue: Arc<Queue>) -> RenderableObject {
+impl<V: Vertex> ObjectPrototype<V> {
+    pub fn into_renderable_object(self, queue: Arc<Queue>) -> RenderableObject {
 
         let vbuf = self.mesh.get_vbuf(queue.clone());
         let ibuf = self.mesh.get_ibuf(queue.clone());
