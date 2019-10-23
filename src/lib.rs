@@ -27,4 +27,6 @@ pub type GraphicsPipeline = Arc<dyn vulkano::pipeline::GraphicsPipelineAbstract 
 pub type Device = Arc<vulkano::device::Device>;
 pub type Queue = Arc<vulkano::device::Queue>;
 pub type Buffer = Arc<dyn vulkano::buffer::BufferAccess + Send + Sync>;
+pub type Image = Arc<dyn vulkano::image::ImageViewAccess + Send + Sync>;
+pub type Set = Arc<dyn vulkano::descriptor::descriptor_set::DescriptorSet + Send + Sync>;
 pub use vulkano::format::Format;

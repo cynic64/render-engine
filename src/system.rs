@@ -54,6 +54,7 @@ pub struct Pass<'a> {
     pub images_created_tags: Vec<&'a str>,
     pub images_needed_tags: Vec<&'a str>,
     pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
+    pub custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
 }
 
 impl<'a> System<'a> {
@@ -84,15 +85,18 @@ impl<'a> System<'a> {
     where
         F: GpuFuture + 'static,
     {
-
-        // create dynamic state (will be the same for every draw call)
-        let dynamic_state = dynamic_state_for_dimensions(dimensions);
-
         // create all images and framebuffers
         let mut images = self.get_images(dimensions);
 
         // replace destination image with the real one
         images.insert(self.output_tag.to_string(), dest_image);
+
+        // use any custom images to replace existing ones
+        for pass in self.passes.iter() {
+            for (tag, image) in pass.custom_images.iter() {
+                images.insert(tag.to_string(), image.clone());
+            }
+        }
 
         let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
 
@@ -104,6 +108,19 @@ impl<'a> System<'a> {
         .unwrap();
 
         for (pass_idx, pass) in self.passes.iter().enumerate() {
+            // create dynamic state if a pass has custom images that are a weird
+            // resolution, the dynamic state needs to account for that assumes
+            // all images within a pass are the same resolution (i think they
+            // have to be for framebuffer creation anyway)
+            let pass_last_img_tag = pass
+                .images_created_tags
+                .iter()
+                .last()
+                .expect("no images created in pass");
+            let last_img = images.get(&pass_last_img_tag.to_string()).unwrap();
+            let pass_dims = [last_img.dimensions().width(), last_img.dimensions().height()];
+            let dynamic_state = dynamic_state_for_dimensions(pass_dims);
+
             let framebuffer = framebuffers[pass_idx].clone();
 
             let clear_values = clear_values_for_pass(pass.render_pass.clone());
@@ -145,7 +162,6 @@ impl<'a> System<'a> {
             cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
         }
 
-
         // uniforms usualy change between frames, no point caching them between
         // frames
         self.collection_cache.clear();
@@ -159,7 +175,11 @@ impl<'a> System<'a> {
         )
     }
 
-    pub fn render_to_window(&mut self, window: &mut Window, objects: HashMap<&str, Vec<RenderableObject>>) {
+    pub fn render_to_window(
+        &mut self,
+        window: &mut Window,
+        objects: HashMap<&str, Vec<RenderableObject>>,
+    ) {
         let swapchain_image = window.next_image();
         let swapchain_fut = window.get_future();
 
@@ -190,7 +210,10 @@ impl<'a> System<'a> {
         })
     }
 
-    fn get_images(&mut self, dimensions: [u32; 2]) -> HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>> {
+    fn get_images(
+        &mut self,
+        dimensions: [u32; 2],
+    ) -> HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>> {
         // gets images to be drawn to either by using cached ones or creating
         // new ones
 
@@ -310,7 +333,14 @@ fn images_for_passes<'a>(
                 .render_pass
                 .attachment_desc(image_idx)
                 .expect("Couldn't get the attachment description when creating images for passes");
-            let image = create_image_for_desc(device.clone(), dimensions, desc);
+
+            // FIXME: yeah this needs a better solution
+            let image = if image_tag.contains("lowres") {
+                create_image_for_desc(device.clone(), [512, 512], desc)
+            } else {
+                create_image_for_desc(device.clone(), dimensions, desc)
+            };
+
             images.insert(image_tag.to_string(), image);
         }
     }
