@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::input::get_elapsed;
-use crate::mesh::{VertexTypeAbstract, VertexType, Dummy};
-use crate::shaders::{ShaderSystem, relative_path};
+use crate::mesh::VertexTypeAbstract;
+use crate::shaders::ShaderSystem;
 
 // pipeline caches are specific to a single render pass.
 pub struct PipelineCache {
@@ -109,18 +109,6 @@ impl PipelineSpec {
             render_pass,
             self.depth,
         )
-    }
-}
-
-impl Default for PipelineSpec {
-    fn default() -> Self {
-        Self {
-            vs_path: relative_path("shaders/forward/default_vert.glsl"),
-            fs_path: relative_path("shaders/forward/default_frag.glsl"),
-            depth: false,
-            fill_type: PrimitiveTopology::TriangleList,
-            vtype: VertexType::<Dummy>::new(),
-        }
     }
 }
 

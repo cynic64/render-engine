@@ -52,6 +52,34 @@ pub fn multisampled_with_depth(device: Arc<Device>, factor: u32) -> RenderPass {
     )
 }
 
+pub fn multisampled(device: Arc<Device>, factor: u32) -> RenderPass {
+    Arc::new(
+        vulkano::single_pass_renderpass!(
+            device.clone(),
+            attachments: {
+                resolve_color: {
+                    load: Clear,
+                    store: Store,
+                    format: DEFAULT_COLOR_FORMAT,
+                    samples: 1,
+                },
+                multisampled_color: {
+                    load: Clear,
+                    store: DontCare,
+                    format: DEFAULT_COLOR_FORMAT,
+                    samples: factor,
+                }
+            },
+            pass: {
+                color: [multisampled_color],
+                depth_stencil: {},
+                resolve: [resolve_color]
+            }
+        )
+        .unwrap(),
+    )
+}
+
 pub fn with_depth(device: Arc<Device>) -> RenderPass {
     Arc::new(
         vulkano::single_pass_renderpass!(

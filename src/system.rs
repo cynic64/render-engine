@@ -196,7 +196,7 @@ impl<'a> System<'a> {
 
         // if there is a cache, make sure its dimensions are the same as what we want
         if let Some(cached) = &self.cached_images {
-            let cached_vk_dims = cached.values().collect::<Vec<_>>()[0].dimensions();
+            let cached_vk_dims = cached.get(self.output_tag).unwrap().dimensions();
             let cached_dimensions = [cached_vk_dims.width(), cached_vk_dims.height()];
 
             if cached_dimensions != dimensions {

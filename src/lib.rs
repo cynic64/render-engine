@@ -19,7 +19,3 @@ pub mod window;
 pub mod shaders;
 
 pub mod render_passes;
-
-pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
-
-pub use vulkano::impl_vertex;

@@ -1,6 +1,8 @@
+pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
+pub use vulkano::impl_vertex;
+
 use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
-use vulkano::pipeline::input_assembly::PrimitiveTopology;
 use vulkano::buffer::{ImmutableBuffer, BufferAccess};
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::{GraphicsPipelineAbstract, GraphicsPipeline};
@@ -15,12 +17,11 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 use std::any::Any;
 
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Dummy {}
-vulkano::impl_vertex!(Dummy);
-
 pub struct RenderableObjectSpec<V: Vertex> {
-    pub pipeline_spec: PipelineSpec,
+    pub vs_path: PathBuf,
+    pub fs_path: PathBuf,
+    pub fill_type: PrimitiveTopology,
+    pub depth_buffer: bool,
     pub mesh: Mesh<V>,
     pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
 }
@@ -32,35 +33,16 @@ impl<V: Vertex> RenderableObjectSpec<V> {
         let ibuf = self.mesh.get_ibuf(queue.clone());
 
         RenderableObject {
-            pipeline_spec: self.pipeline_spec,
+            pipeline_spec: PipelineSpec {
+                vs_path: self.vs_path,
+                fs_path: self.fs_path,
+                fill_type: self.fill_type,
+                depth: self.depth_buffer,
+                vtype: VertexType::<V>::new(),
+            },
             vbuf,
             ibuf,
             custom_sets: self.custom_sets,
-        }
-    }
-}
-
-impl<V: Vertex> Default for RenderableObjectSpec<V> {
-    fn default() -> Self {
-        let vertices: Vec<V> = vec![];
-
-        let pipeline_spec = PipelineSpec {
-            vs_path: relative_path("shaders/forward/default_vert.glsl"),
-            depth: false,
-            fill_type: PrimitiveTopology::TriangleList,
-            fs_path: relative_path("shaders/forward/default_frag.glsl"),
-            vtype: Arc::new(VertexType {
-                phantom: PhantomData::<V>,
-            }),
-        };
-
-        Self {
-            pipeline_spec,
-            mesh: Mesh {
-                vertices,
-                indices: vec![],
-            },
-            custom_sets: vec![],
         }
     }
 }
