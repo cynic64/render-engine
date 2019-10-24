@@ -119,7 +119,6 @@ impl<'a> System<'a> {
                 .expect("no images created in pass");
             let last_img = images.get(&pass_last_img_tag.to_string()).unwrap();
             let pass_dims = [last_img.dimensions().width(), last_img.dimensions().height()];
-            let dynamic_state = dynamic_state_for_dimensions(pass_dims);
 
             let framebuffer = framebuffers[pass_idx].clone();
 
@@ -132,6 +131,13 @@ impl<'a> System<'a> {
             let pass_objects = objects[pass.name].clone();
 
             for object in pass_objects.iter() {
+                // TODO: dynamic state is re-created for every object, shouldn't be
+                let dynamic_state = if let Some(dynstate) = object.custom_dynamic_state.clone() {
+                    dynstate
+                } else {
+                    dynamic_state_for_dimensions(pass_dims)
+                };
+
                 let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
                 // only stores the images that are fed to every object, not
@@ -243,6 +249,7 @@ pub struct RenderableObject {
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<ImmutableBuffer<[u32]>>,
     pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub custom_dynamic_state: Option<DynamicState>,
 }
 
 fn create_image_for_desc(

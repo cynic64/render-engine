@@ -7,6 +7,7 @@ use vulkano::buffer::{ImmutableBuffer, BufferAccess};
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::{GraphicsPipelineAbstract, GraphicsPipeline};
 use vulkano::pipeline::depth_stencil::{DepthStencil, Compare};
+use vulkano::command_buffer::DynamicState;
 
 use crate::pipeline_cache::PipelineSpec;
 use crate::system::RenderableObject;
@@ -26,6 +27,7 @@ pub struct ObjectPrototype<V: Vertex> {
     pub write_depth: bool,
     pub mesh: Mesh<V>,
     pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub custom_dynamic_state: Option<DynamicState>,
 }
 
 impl<V: Vertex> ObjectPrototype<V> {
@@ -46,6 +48,7 @@ impl<V: Vertex> ObjectPrototype<V> {
             vbuf,
             ibuf,
             custom_sets: self.custom_sets,
+            custom_dynamic_state: self.custom_dynamic_state,
         }
     }
 }
