@@ -32,6 +32,7 @@ pub struct System<'a> {
     queue: Arc<Queue>,
     pub output_tag: &'a str,
     cached_images: Option<HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>>,
+    pub custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
@@ -54,11 +55,15 @@ pub struct Pass<'a> {
     pub images_created_tags: Vec<&'a str>,
     pub images_needed_tags: Vec<&'a str>,
     pub render_pass: Arc<dyn RenderPassAbstract + Send + Sync>,
-    pub custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
 }
 
 impl<'a> System<'a> {
-    pub fn new(queue: Arc<Queue>, passes: Vec<Pass<'a>>, output_tag: &'a str) -> Self {
+    pub fn new(
+        queue: Arc<Queue>,
+        passes: Vec<Pass<'a>>,
+        custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
+        output_tag: &'a str,
+    ) -> Self {
         let device = queue.device().clone();
 
         let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
@@ -72,6 +77,7 @@ impl<'a> System<'a> {
             queue,
             output_tag,
             cached_images: None,
+            custom_images,
         }
     }
 
@@ -92,10 +98,8 @@ impl<'a> System<'a> {
         images.insert(self.output_tag.to_string(), dest_image);
 
         // use any custom images to replace existing ones
-        for pass in self.passes.iter() {
-            for (tag, image) in pass.custom_images.iter() {
-                images.insert(tag.to_string(), image.clone());
-            }
+        for (tag, image) in self.custom_images.iter() {
+            images.insert(tag.to_string(), image.clone());
         }
 
         let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
@@ -118,7 +122,10 @@ impl<'a> System<'a> {
                 .last()
                 .expect("no images created in pass");
             let last_img = images.get(&pass_last_img_tag.to_string()).unwrap();
-            let pass_dims = [last_img.dimensions().width(), last_img.dimensions().height()];
+            let pass_dims = [
+                last_img.dimensions().width(),
+                last_img.dimensions().height(),
+            ];
 
             let framebuffer = framebuffers[pass_idx].clone();
 
