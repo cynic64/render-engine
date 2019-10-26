@@ -16,6 +16,7 @@ use crate::collection_cache::CollectionCache;
 use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 use crate::render_passes::clear_values_for_pass;
 use crate::window::Window;
+use crate::utils::Timer;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -33,6 +34,10 @@ pub struct System<'a> {
     pub output_tag: &'a str,
     cached_images: Option<HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>>,
     pub custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
+    pass_timers: Vec<Timer>,
+    cmd_buf_timer: Timer,
+    present_timer: Timer,
+    setup_timer: Timer,
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
@@ -68,6 +73,7 @@ impl<'a> System<'a> {
 
         let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
         let collection_cache = CollectionCache::new(device.clone());
+        let pass_timers = passes.iter().map(|pass| Timer::new(pass.name)).collect();
 
         Self {
             passes,
@@ -78,6 +84,10 @@ impl<'a> System<'a> {
             output_tag,
             cached_images: None,
             custom_images,
+            pass_timers,
+            cmd_buf_timer: Timer::new("command buffer"),
+            present_timer: Timer::new("present to window"),
+            setup_timer: Timer::new("pass setup"),
         }
     }
 
@@ -91,6 +101,8 @@ impl<'a> System<'a> {
     where
         F: GpuFuture + 'static,
     {
+        self.setup_timer.start();
+
         // create all images and framebuffers
         let mut images = self.get_images(dimensions);
 
@@ -111,7 +123,11 @@ impl<'a> System<'a> {
         )
         .unwrap();
 
+        self.setup_timer.stop();
+
+        self.cmd_buf_timer.start();
         for (pass_idx, pass) in self.passes.iter().enumerate() {
+            self.pass_timers[pass_idx].start();
             // create dynamic state if a pass has custom images that are a weird
             // resolution, the dynamic state needs to account for that assumes
             // all images within a pass are the same resolution (i think they
@@ -173,7 +189,10 @@ impl<'a> System<'a> {
             }
 
             cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
+
+            self.pass_timers[pass_idx].stop();
         }
+        self.cmd_buf_timer.stop();
 
         // uniforms usualy change between frames, no point caching them between
         // frames
@@ -204,7 +223,9 @@ impl<'a> System<'a> {
             swapchain_fut,
         );
 
+        self.present_timer.start();
         window.present_future(frame_fut);
+        self.present_timer.stop();
     }
 
     pub fn get_passes(&self) -> &[Pass] {
@@ -212,6 +233,15 @@ impl<'a> System<'a> {
     }
 
     pub fn print_stats(&self) {
+        println!();
+
+        self.cmd_buf_timer.print();
+        self.present_timer.print();
+        self.setup_timer.print();
+        self.pass_timers.iter().for_each(|timer| timer.print());
+
+        println!();
+
         (0..self.passes.len()).for_each(|idx| {
             println!("Pipeline cache stats for pass {}:", self.passes[idx].name);
             self.pipeline_caches[idx].print_stats();
@@ -220,7 +250,9 @@ impl<'a> System<'a> {
             self.collection_cache.print_stats();
             println!();
             println!();
-        })
+        });
+
+        println!();
     }
 
     fn get_images(

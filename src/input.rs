@@ -54,6 +54,10 @@ impl EventHandler {
         (self.frames_drawn as f32) / get_elapsed(self.start_time)
     }
 
+    pub fn avg_delta(&self) -> f32 {
+        get_elapsed(self.start_time) / (self.frames_drawn as f32)
+    }
+
     pub fn collect_events(&mut self) -> bool {
         // returns whether the program should exit or not
         // clobbers all input from the last frame, mind

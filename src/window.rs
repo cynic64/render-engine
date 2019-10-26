@@ -103,6 +103,10 @@ impl Window {
         self.event_handler.get_fps()
     }
 
+    pub fn get_avg_delta(&self) -> f32 {
+        self.event_handler.avg_delta()
+    }
+
     pub fn get_frame_info(&self) -> FrameInfo {
         self.event_handler.frame_info.clone()
     }
