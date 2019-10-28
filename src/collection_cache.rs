@@ -38,9 +38,9 @@ impl CollectionCache {
             Filter::Linear,
             Filter::Linear,
             MipmapMode::Nearest,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
-            SamplerAddressMode::Repeat,
+            SamplerAddressMode::ClampToEdge,
+            SamplerAddressMode::ClampToEdge,
+            SamplerAddressMode::ClampToEdge,
             0.0,
             1.0,
             0.0,
@@ -57,9 +57,6 @@ impl CollectionCache {
 
     // TODO: replace with a struct that defines a uniform buffer: what spec
     // pipeline is belongs to, what resources it needs, etc.
-
-    // important to remember: 'images' are written to then read later, whereas
-    // resources are meant to be read only.
     pub fn get(
         &mut self,
         spec: &PipelineSpec,

@@ -185,7 +185,7 @@ impl<'a> System<'a> {
                         collection,
                         (),
                     )
-                    .unwrap();
+                    .expect(&format!("error building cmd buf, in pass {}", pass.name));
             }
 
             cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
