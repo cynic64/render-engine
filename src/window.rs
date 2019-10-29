@@ -2,7 +2,7 @@ use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::framebuffer::RenderPassAbstract;
 use vulkano::image::SwapchainImage;
 use vulkano::instance::{Instance, PhysicalDevice};
-use vulkano::swapchain::SwapchainAcquireFuture;
+use vulkano::swapchain::{SwapchainAcquireFuture, Surface};
 use vulkano::sync::GpuFuture;
 
 use vulkano_win::VkSurfaceBuild;
@@ -20,6 +20,7 @@ pub struct Window {
     vk_window: VkWindow,
     event_handler: EventHandler,
     queue: Arc<Queue>,
+    recenter: bool,
 }
 
 impl Window {
@@ -55,6 +56,7 @@ impl Window {
             vk_window,
             event_handler,
             queue: queue.clone(),
+            recenter: true,
         };
 
         (window, queue)
@@ -76,9 +78,19 @@ impl Window {
         // returns whether to exit the program or not
         // TODO: return an enum or move the done-checking to its own function
         let done = self.event_handler.update(self.get_dimensions());
-        self.recenter_cursor();
+        if self.recenter {
+            self.recenter_cursor();
+        }
 
         done
+    }
+
+    pub fn get_surface(&self) -> Arc<Surface<winit::Window>> {
+        self.vk_window.get_surface()
+    }
+
+    pub fn set_recenter(&mut self, state: bool) {
+        self.recenter = state;
     }
 
     fn recenter_cursor(&mut self) {
