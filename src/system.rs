@@ -1,6 +1,5 @@
 use vulkano::buffer::{BufferAccess, ImmutableBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
@@ -17,6 +16,7 @@ use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 use crate::render_passes::clear_values_for_pass;
 use crate::window::Window;
 use crate::utils::Timer;
+use crate::data::DataAbstract;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -172,7 +172,12 @@ impl<'a> System<'a> {
                     &images,
                 );
 
-                for set in object.custom_sets.iter() {
+                let custom_sets = object.custom_data.create_sets(
+                    self.queue.clone(),
+                    pipeline.clone(),
+                );
+
+                for set in custom_sets.iter() {
                     collection.push(set.clone());
                 }
 
@@ -287,7 +292,7 @@ pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<ImmutableBuffer<[u32]>>,
-    pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub custom_data: Arc<dyn DataAbstract>,
     pub custom_dynamic_state: Option<DynamicState>,
 }
 

@@ -20,6 +20,8 @@ pub mod shaders;
 
 pub mod render_passes;
 
+pub mod data;
+
 // re-exports of vulkano's stuff
 use std::sync::Arc;
 pub type RenderPass = Arc<dyn vulkano::framebuffer::RenderPassAbstract + Send + Sync>;

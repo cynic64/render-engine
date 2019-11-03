@@ -1,7 +1,6 @@
 pub use vulkano::pipeline::input_assembly::PrimitiveTopology;
 pub use vulkano::impl_vertex;
 
-use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::buffer::{ImmutableBuffer, BufferAccess};
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
@@ -13,24 +12,25 @@ use crate::pipeline_cache::PipelineSpec;
 use crate::system::RenderableObject;
 use crate::utils::bufferize_slice;
 use crate::shaders::ShaderSystem;
+use crate::data::DataAbstract;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::marker::PhantomData;
 use std::any::Any;
 
-pub struct ObjectPrototype<V: Vertex> {
+pub struct ObjectPrototype<V: Vertex, T: DataAbstract> {
     pub vs_path: PathBuf,
     pub fs_path: PathBuf,
     pub fill_type: PrimitiveTopology,
     pub read_depth: bool,
     pub write_depth: bool,
     pub mesh: Mesh<V>,
-    pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub custom_data: T,
     pub custom_dynamic_state: Option<DynamicState>,
 }
 
-impl<V: Vertex> ObjectPrototype<V> {
+impl<V: Vertex, T: DataAbstract + 'static> ObjectPrototype<V, T> {
     pub fn into_renderable_object(self, queue: Arc<Queue>) -> RenderableObject {
 
         let vbuf = self.mesh.get_vbuf(queue.clone());
@@ -47,7 +47,7 @@ impl<V: Vertex> ObjectPrototype<V> {
             },
             vbuf,
             ibuf,
-            custom_sets: self.custom_sets,
+            custom_data: Arc::new(self.custom_data),
             custom_dynamic_state: self.custom_dynamic_state,
         }
     }
