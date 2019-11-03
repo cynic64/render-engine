@@ -10,13 +10,9 @@ pub trait DataAbstract {
     fn create_sets(&self, queue: Arc<Queue>, pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>) -> Vec<Arc<dyn DescriptorSet + Send + Sync>>;
 }
 
-pub struct Data<T: Send + Sync + Clone + 'static> {
-    pub data: T,
-}
-
-impl<T: Send + Sync + Clone + 'static> DataAbstract for Data<T> {
+impl<T: Usable> DataAbstract for T {
     fn create_sets(&self, queue: Arc<Queue>, pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
-        let buffer = bufferize_data(queue, self.data.clone());
+        let buffer = bufferize_data(queue, self.clone());
         let set = Arc::new(
             PersistentDescriptorSet::start(pipeline, 0)
                 .add_buffer(buffer)
@@ -27,6 +23,11 @@ impl<T: Send + Sync + Clone + 'static> DataAbstract for Data<T> {
         vec![set]
     }
 }
+
+// TODO: more specific name
+pub trait Usable: Send + Sync + Clone + 'static {}
+
+impl<T: Send + Sync + Clone + 'static> Usable for T {}
 
 pub struct NoData {}
 
