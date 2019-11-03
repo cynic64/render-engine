@@ -1,6 +1,5 @@
 use vulkano::buffer::{BufferAccess, ImmutableBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
-use vulkano::descriptor::DescriptorSet;
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
@@ -12,11 +11,11 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::collection_cache::CollectionCache;
+use crate::collection::Collection;
 use crate::pipeline_cache::{PipelineCache, PipelineSpec};
 use crate::render_passes::clear_values_for_pass;
-use crate::window::Window;
 use crate::utils::Timer;
+use crate::window::Window;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -27,7 +26,6 @@ use crate::utils::Timer;
 pub struct System<'a> {
     pub passes: Vec<Pass<'a>>,
     pipeline_caches: Vec<PipelineCache>,
-    collection_cache: CollectionCache,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     device: Arc<Device>,
     queue: Arc<Queue>,
@@ -72,13 +70,11 @@ impl<'a> System<'a> {
         let device = queue.device().clone();
 
         let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
-        let collection_cache = CollectionCache::new(device.clone());
         let pass_timers = passes.iter().map(|pass| Timer::new(pass.name)).collect();
 
         Self {
             passes,
             pipeline_caches,
-            collection_cache,
             device,
             queue,
             output_tag,
@@ -163,18 +159,9 @@ impl<'a> System<'a> {
 
                 let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
 
-                // only stores the images that are fed to every object, not
-                // object-specific images and buffers.
-                let mut collection = self.collection_cache.get(
-                    &object.pipeline_spec,
-                    pipeline.clone(),
-                    &pass,
-                    &images,
-                );
-
-                for set in object.custom_sets.iter() {
-                    collection.push(set.clone());
-                }
+                let collection = object
+                    .collection
+                    .convert(self.queue.clone(), pipeline.clone());
 
                 cmd_buf_builder = cmd_buf_builder
                     .draw_indexed(
@@ -193,10 +180,6 @@ impl<'a> System<'a> {
             self.pass_timers[pass_idx].stop();
         }
         self.cmd_buf_timer.stop();
-
-        // uniforms usualy change between frames, no point caching them between
-        // frames
-        self.collection_cache.clear();
 
         let final_cmd_buf = cmd_buf_builder.build().unwrap();
 
@@ -246,9 +229,6 @@ impl<'a> System<'a> {
             println!("Pipeline cache stats for pass {}:", self.passes[idx].name);
             self.pipeline_caches[idx].print_stats();
             println!();
-            println!("Collection cache stats:");
-            self.collection_cache.print_stats();
-            println!();
             println!();
         });
 
@@ -287,7 +267,7 @@ pub struct RenderableObject {
     pub pipeline_spec: PipelineSpec,
     pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
     pub ibuf: Arc<ImmutableBuffer<[u32]>>,
-    pub custom_sets: Vec<Arc<dyn DescriptorSet + Send + Sync>>,
+    pub collection: Arc<dyn Collection>,
     pub custom_dynamic_state: Option<DynamicState>,
 }
 
