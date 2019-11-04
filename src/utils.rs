@@ -1,9 +1,10 @@
 use vulkano::buffer::{BufferUsage, ImmutableBuffer};
-use vulkano::device::Queue;
+use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
 use vulkano::image::{Dimensions, ImageViewAccess, ImmutableImage};
 use vulkano::memory::Content;
 use vulkano::sync::GpuFuture;
+use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
 
 use crate::input::get_elapsed;
 
@@ -55,6 +56,23 @@ pub fn load_texture(
         .unwrap();
 
     texture
+}
+
+pub fn default_sampler(device: Arc<Device>) -> Arc<Sampler> {
+    Sampler::new(
+        device,
+        Filter::Linear,
+        Filter::Linear,
+        MipmapMode::Nearest,
+        SamplerAddressMode::Repeat,
+        SamplerAddressMode::Repeat,
+        SamplerAddressMode::Repeat,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+    )
+    .unwrap()
 }
 
 // used for averaging times for benchmarks

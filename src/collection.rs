@@ -20,6 +20,7 @@ pipeline and queue.
 use vulkano::device::Queue;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
+use vulkano::image::ImageViewAccess;
 
 use crate::utils::bufferize_data;
 
@@ -98,6 +99,24 @@ impl<T: Data> Set for (T,) {
     }
 }
 
+/*
+impl Set for (Image,) {
+    fn upload(
+        &self,
+        queue: Arc<Queue>,
+        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    ) -> Arc<dyn DescriptorSet + Send + Sync> {
+        Arc::new(
+            PersistentDescriptorSet::start(pipeline, 0)
+                .add_buffer(buffer)
+                .unwrap()
+                .build()
+                .unwrap()
+        )
+    }
+}
+*/
+
 impl<T1: Data, T2: Data> Set for (T1, T2) {
     fn upload(
         &self,
@@ -119,6 +138,8 @@ impl<T1: Data, T2: Data> Set for (T1, T2) {
     }
 }
 
-pub trait Data: Send + Sync + Clone + 'static {}
+/*
+pub type Image = Arc<dyn ImageViewAccess + Send + Sync>;
+*/
 
-impl<T: Send + Sync + Clone + 'static> Data for T {}
+pub trait Data: Send + Sync + Clone + 'static {}
