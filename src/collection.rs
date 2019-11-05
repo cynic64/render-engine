@@ -27,6 +27,9 @@ use crate::utils::{bufferize_data, default_sampler};
 use std::sync::Arc;
 
 // TODO: tests for all this crap
+// TODO: convert immediately when the user creates the collection, because this
+// means that if it panics it will panic there and not in render_frame, where it
+// is harder to track down.
 
 pub trait Collection {
     fn convert(
@@ -53,7 +56,7 @@ impl<T: Set> Collection for (T,) {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue, pipeline)
+            self.0.upload(queue, pipeline, 0)
         ]
     }
 }
@@ -65,8 +68,8 @@ impl<T1: Set, T2: Set> Collection for (T1, T2) {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue.clone(), pipeline.clone()),
-            self.1.upload(queue.clone(), pipeline.clone()),
+            self.0.upload(queue.clone(), pipeline.clone(), 0),
+            self.1.upload(queue.clone(), pipeline.clone(), 1),
         ]
     }
 }
@@ -78,9 +81,9 @@ impl<T1: Set, T2: Set, T3: Set> Collection for (T1, T2, T3) {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue.clone(), pipeline.clone()),
-            self.1.upload(queue.clone(), pipeline.clone()),
-            self.2.upload(queue.clone(), pipeline.clone()),
+            self.0.upload(queue.clone(), pipeline.clone(), 0),
+            self.1.upload(queue.clone(), pipeline.clone(), 1),
+            self.2.upload(queue.clone(), pipeline.clone(), 2),
         ]
     }
 }
@@ -92,10 +95,10 @@ impl<T1: Set, T2: Set, T3: Set, T4: Set> Collection for (T1, T2, T3, T4) {
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue.clone(), pipeline.clone()),
-            self.1.upload(queue.clone(), pipeline.clone()),
-            self.2.upload(queue.clone(), pipeline.clone()),
-            self.3.upload(queue.clone(), pipeline.clone()),
+            self.0.upload(queue.clone(), pipeline.clone(), 0),
+            self.1.upload(queue.clone(), pipeline.clone(), 1),
+            self.2.upload(queue.clone(), pipeline.clone(), 2),
+            self.3.upload(queue.clone(), pipeline.clone(), 3),
         ]
     }
 }
@@ -109,6 +112,7 @@ pub trait Set {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync>;
 }
 
@@ -118,15 +122,16 @@ impl<T: Data> Set for (T,) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let buffer = bufferize_data(queue.clone(), self.0.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(buffer)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -136,14 +141,15 @@ impl Set for (Image,) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -154,18 +160,19 @@ impl<T1: Data, T2: Data> Set for (T1, T2) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let buffer1 = bufferize_data(queue.clone(), self.0.clone());
         let buffer2 = bufferize_data(queue.clone(), self.1.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(buffer1)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .add_buffer(buffer2)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -175,18 +182,19 @@ impl<T: Data> Set for (Image, T) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer2 = bufferize_data(queue.clone(), self.1.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_buffer(buffer2)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -196,18 +204,19 @@ impl<T: Data> Set for (T, Image) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer1 = bufferize_data(queue.clone(), self.0.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.1.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_buffer(buffer1)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -217,17 +226,18 @@ impl Set for (Image, Image) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler.clone())
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_sampled_image(self.1.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd image at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -238,21 +248,22 @@ impl<T1: Data, T2: Data, T3: Data> Set for (T1, T2, T3) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let buffer1 = bufferize_data(queue.clone(), self.0.clone());
         let buffer2 = bufferize_data(queue.clone(), self.1.clone());
         let buffer3 = bufferize_data(queue.clone(), self.2.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(buffer1)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .add_buffer(buffer2)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .add_buffer(buffer3)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -262,21 +273,22 @@ impl<T1: Data, T2: Data> Set for (Image, T1, T2) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer2 = bufferize_data(queue.clone(), self.1.clone());
         let buffer3 = bufferize_data(queue.clone(), self.2.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_buffer(buffer2)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .add_buffer(buffer3)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -286,21 +298,22 @@ impl<T1: Data, T2: Data> Set for (T1, Image, T2) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer1 = bufferize_data(queue.clone(), self.0.clone());
         let buffer3 = bufferize_data(queue.clone(), self.2.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(buffer1)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .add_sampled_image(self.1.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd image at set idx {}", set_idx))
                 .add_buffer(buffer3)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -310,21 +323,22 @@ impl<T1: Data, T2: Data> Set for (T1, T2, Image) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer1 = bufferize_data(queue.clone(), self.0.clone());
         let buffer2 = bufferize_data(queue.clone(), self.1.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(buffer1)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .add_buffer(buffer2)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .add_sampled_image(self.2.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd image at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -334,20 +348,21 @@ impl<T: Data> Set for (T, Image, Image) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer1 = bufferize_data(queue.clone(), self.0.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_buffer(buffer1)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .add_sampled_image(self.1.clone(), sampler.clone())
-                .unwrap()
+                .expect(&format!("Panic adding 2nd image at set idx {}", set_idx))
                 .add_sampled_image(self.2.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd image at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -357,20 +372,21 @@ impl<T: Data> Set for (Image, T, Image) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer2 = bufferize_data(queue.clone(), self.1.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler.clone())
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_buffer(buffer2)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd buffer at set idx {}", set_idx))
                 .add_sampled_image(self.2.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd image at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -380,20 +396,21 @@ impl<T: Data> Set for (Image, Image, T) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
         let buffer3 = bufferize_data(queue.clone(), self.2.clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler.clone())
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_sampled_image(self.1.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 2nd image at set idx {}", set_idx))
                 .add_buffer(buffer3)
-                .unwrap()
+                .expect(&format!("Panic adding 1st buffer at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
@@ -403,19 +420,20 @@ impl Set for (Image, Image, Image) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
         let sampler = default_sampler(queue.device().clone());
 
         Arc::new(
-            PersistentDescriptorSet::start(pipeline, 0)
+            PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler.clone())
-                .unwrap()
+                .expect(&format!("Panic adding 1st image at set idx {}", set_idx))
                 .add_sampled_image(self.1.clone(), sampler.clone())
-                .unwrap()
+                .expect(&format!("Panic adding 2nd image at set idx {}", set_idx))
                 .add_sampled_image(self.2.clone(), sampler)
-                .unwrap()
+                .expect(&format!("Panic adding 3rd image at set idx {}", set_idx))
                 .build()
-                .unwrap()
+                .expect(&format!("Panic finalizing set at set idx {}", set_idx))
         )
     }
 }
