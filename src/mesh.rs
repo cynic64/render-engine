@@ -6,52 +6,13 @@ use vulkano::buffer::{ImmutableBuffer, BufferAccess};
 use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::{GraphicsPipelineAbstract, GraphicsPipeline};
 use vulkano::pipeline::depth_stencil::{DepthStencil, Compare};
-use vulkano::command_buffer::DynamicState;
 
-use crate::pipeline_cache::PipelineSpec;
-use crate::system::RenderableObject;
 use crate::utils::bufferize_slice;
 use crate::shaders::ShaderSystem;
-use crate::collection::Collection;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::marker::PhantomData;
 use std::any::Any;
-
-pub struct ObjectPrototype<V: Vertex, T: Collection> {
-    pub vs_path: PathBuf,
-    pub fs_path: PathBuf,
-    pub fill_type: PrimitiveTopology,
-    pub read_depth: bool,
-    pub write_depth: bool,
-    pub mesh: Mesh<V>,
-    pub collection: T,
-    pub custom_dynamic_state: Option<DynamicState>,
-}
-
-impl<V: Vertex, T: Collection + 'static> ObjectPrototype<V, T> {
-    pub fn into_renderable_object(self, queue: Arc<Queue>) -> RenderableObject {
-
-        let vbuf = self.mesh.get_vbuf(queue.clone());
-        let ibuf = self.mesh.get_ibuf(queue.clone());
-
-        RenderableObject {
-            pipeline_spec: PipelineSpec {
-                vs_path: self.vs_path,
-                fs_path: self.fs_path,
-                fill_type: self.fill_type,
-                read_depth: self.read_depth,
-                write_depth: self.write_depth,
-                vtype: VertexType::<V>::new(),
-            },
-            vbuf,
-            ibuf,
-            collection: Arc::new(self.collection),
-            custom_dynamic_state: self.custom_dynamic_state,
-        }
-    }
-}
 
 // TODO: instead of having arc<dyn vertexlist>, give mesh a type parameter and
 // create a MeshAbstract type.

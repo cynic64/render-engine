@@ -1,4 +1,3 @@
-use vulkano::buffer::{BufferAccess, ImmutableBuffer};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::device::{Device, Queue};
 use vulkano::framebuffer::{
@@ -11,11 +10,11 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::collection::Collection;
-use crate::pipeline_cache::{PipelineCache, PipelineSpec};
+use crate::pipeline_cache::PipelineCache;
 use crate::render_passes::clear_values_for_pass;
 use crate::utils::Timer;
 use crate::window::Window;
+use crate::object::Drawcall;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -90,7 +89,7 @@ impl<'a> System<'a> {
     pub fn render<F>(
         &mut self,
         dimensions: [u32; 2],
-        objects: HashMap<&str, Vec<RenderableObject>>,
+        objects: HashMap<&str, Vec<Arc<dyn Drawcall>>>,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
         future: F,
     ) -> Box<dyn GpuFuture>
@@ -151,24 +150,23 @@ impl<'a> System<'a> {
 
             for object in pass_objects.iter() {
                 // TODO: dynamic state is re-created for every object, shouldn't be
-                let dynamic_state = if let Some(dynstate) = object.custom_dynamic_state.clone() {
+                let dynamic_state = if let Some(dynstate) = object.custom_dynstate() {
                     dynstate
                 } else {
                     dynamic_state_for_dimensions(pass_dims)
                 };
 
-                let pipeline = self.pipeline_caches[pass_idx].get(&object.pipeline_spec);
+                let pipeline = self.pipeline_caches[pass_idx].get(object.pipe_spec());
 
                 let collection = object
-                    .collection
-                    .convert(self.queue.clone(), pipeline.clone());
+                    .collection(self.queue.clone(), pipeline.clone());
 
                 cmd_buf_builder = cmd_buf_builder
                     .draw_indexed(
                         pipeline,
                         &dynamic_state,
-                        vec![object.vbuf.clone()],
-                        object.ibuf.clone(),
+                        vec![object.vbuf()],
+                        object.ibuf(),
                         collection,
                         (),
                     )
@@ -193,7 +191,7 @@ impl<'a> System<'a> {
     pub fn render_to_window(
         &mut self,
         window: &mut Window,
-        objects: HashMap<&str, Vec<RenderableObject>>,
+        objects: HashMap<&str, Vec<Arc<dyn Drawcall>>>,
     ) {
         let swapchain_image = window.next_image();
         let swapchain_fut = window.get_future();
@@ -260,15 +258,6 @@ impl<'a> System<'a> {
             new
         }
     }
-}
-
-#[derive(Clone)]
-pub struct RenderableObject {
-    pub pipeline_spec: PipelineSpec,
-    pub vbuf: Arc<dyn BufferAccess + Send + Sync>,
-    pub ibuf: Arc<ImmutableBuffer<[u32]>>,
-    pub collection: Arc<dyn Collection>,
-    pub custom_dynamic_state: Option<DynamicState>,
 }
 
 fn create_image_for_desc(

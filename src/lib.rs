@@ -22,6 +22,8 @@ pub mod render_passes;
 
 pub mod collection;
 
+pub mod object;
+
 // re-exports of vulkano's stuff
 use std::sync::Arc;
 pub type RenderPass = Arc<dyn vulkano::framebuffer::RenderPassAbstract + Send + Sync>;
