@@ -10,11 +10,12 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::collection_cache::CollectionCache;
+use crate::object::Drawcall;
 use crate::pipeline_cache::PipelineCache;
 use crate::render_passes::clear_values_for_pass;
 use crate::utils::Timer;
 use crate::window::Window;
-use crate::object::Drawcall;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -25,16 +26,30 @@ use crate::object::Drawcall;
 pub struct System<'a> {
     pub passes: Vec<Pass<'a>>,
     pipeline_caches: Vec<PipelineCache>,
+    collection_cache: CollectionCache,
     // stores the vbuf of the screen-filling square used for non-geometry passes
     device: Arc<Device>,
     queue: Arc<Queue>,
     pub output_tag: &'a str,
     cached_images: Option<HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>>,
     pub custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
+    partial: Option<PartialRender>,
     pass_timers: Vec<Timer>,
     cmd_buf_timer: Timer,
     present_timer: Timer,
     setup_timer: Timer,
+}
+
+struct PartialRender {
+    cmd_buf: AutoCommandBufferBuilder,
+    images: HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>,
+    framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
+    current_pass: Option<PartialPass>,
+}
+
+struct PartialPass {
+    dims: [u32; 2],
+    pass_idx: usize,
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
@@ -69,16 +84,19 @@ impl<'a> System<'a> {
         let device = queue.device().clone();
 
         let pipeline_caches = pipe_caches_for_passes(device.clone(), &passes);
+        let collection_cache = CollectionCache::new(device.clone());
         let pass_timers = passes.iter().map(|pass| Timer::new(pass.name)).collect();
 
         Self {
             passes,
             pipeline_caches,
+            collection_cache,
             device,
             queue,
             output_tag,
             cached_images: None,
             custom_images,
+            partial: None,
             pass_timers,
             cmd_buf_timer: Timer::new("command buffer"),
             present_timer: Timer::new("present to window"),
@@ -86,16 +104,11 @@ impl<'a> System<'a> {
         }
     }
 
-    pub fn render<F>(
+    pub fn begin_render(
         &mut self,
         dimensions: [u32; 2],
-        objects: HashMap<&str, Vec<Arc<dyn Drawcall>>>,
         dest_image: Arc<dyn ImageViewAccess + Send + Sync>,
-        future: F,
-    ) -> Box<dyn GpuFuture>
-    where
-        F: GpuFuture + 'static,
-    {
+    ) {
         self.setup_timer.start();
 
         // create all images and framebuffers
@@ -112,74 +125,134 @@ impl<'a> System<'a> {
         let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
 
         // create the command buffer
-        let mut cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
+        let cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
             self.device.clone(),
             self.queue.family(),
         )
         .unwrap();
 
+        // save state
+        let partial = PartialRender {
+            cmd_buf: cmd_buf_builder,
+            images,
+            framebuffers,
+            current_pass: None,
+        };
+
+        self.partial = Some(partial);
+
         self.setup_timer.stop();
-
         self.cmd_buf_timer.start();
-        for (pass_idx, pass) in self.passes.iter().enumerate() {
-            self.pass_timers[pass_idx].start();
-            // create dynamic state if a pass has custom images that are a weird
-            // resolution, the dynamic state needs to account for that assumes
-            // all images within a pass are the same resolution (i think they
-            // have to be for framebuffer creation anyway)
-            let pass_last_img_tag = pass
-                .images_created_tags
-                .iter()
-                .last()
-                .expect("no images created in pass");
-            let last_img = images.get(&pass_last_img_tag.to_string()).unwrap();
-            let pass_dims = [
-                last_img.dimensions().width(),
-                last_img.dimensions().height(),
-            ];
+    }
 
-            let framebuffer = framebuffers[pass_idx].clone();
+    pub fn begin_render_window(&mut self, window: &mut Window) {
+        let swapchain_image = window.next_image();
+        let dims = SwapchainImage::dimensions(&swapchain_image);
+        self.begin_render(dims, swapchain_image);
+    }
 
-            let clear_values = clear_values_for_pass(pass.render_pass.clone());
+    pub fn next_pass(&mut self) {
+        let mut end_prev_pass = false;
+        let new_pass_idx = match self.partial {
+            Some(PartialRender {
+                current_pass: Some(PartialPass { pass_idx, .. }),
+                ..
+            }) => {
+                end_prev_pass = true;
+                pass_idx + 1
+            },
+            _ => 0,
+        };
 
-            cmd_buf_builder = cmd_buf_builder
-                .begin_render_pass(framebuffer, false, clear_values)
-                .unwrap();
+        let pass = &self.passes[new_pass_idx];
 
-            let pass_objects = objects[pass.name].clone();
+        // self.pass_timers[new_pass_idx].start();
+        let mut partial = self.partial.take().unwrap();
 
-            for object in pass_objects.iter() {
-                // TODO: dynamic state is re-created for every object, shouldn't be
-                let dynamic_state = if let Some(dynstate) = object.custom_dynstate() {
-                    dynstate
-                } else {
-                    dynamic_state_for_dimensions(pass_dims)
-                };
+        let pass_last_img_tag = pass
+            .images_created_tags
+            .iter()
+            .last()
+            .expect("no images created in pass");
+        let last_img = partial
+            .images
+            .get(&pass_last_img_tag.to_string())
+            .unwrap();
+        let pass_dims = [
+            last_img.dimensions().width(),
+            last_img.dimensions().height(),
+        ];
 
-                let pipeline = self.pipeline_caches[pass_idx].get(object.pipe_spec());
+        let framebuffer = partial.framebuffers[new_pass_idx].clone();
 
-                let collection = object
-                    .collection(self.queue.clone(), pipeline.clone());
+        let clear_values = clear_values_for_pass(pass.render_pass.clone());
 
-                cmd_buf_builder = cmd_buf_builder
-                    .draw_indexed(
-                        pipeline,
-                        &dynamic_state,
-                        vec![object.vbuf()],
-                        object.ibuf(),
-                        collection,
-                        (),
-                    )
-                    .expect(&format!("error building cmd buf, in pass {}", pass.name));
-            }
-
-            cmd_buf_builder = cmd_buf_builder.end_render_pass().unwrap();
-
-            self.pass_timers[pass_idx].stop();
+        if end_prev_pass {
+            partial.cmd_buf = partial.cmd_buf.end_render_pass().unwrap();
         }
-        self.cmd_buf_timer.stop();
 
-        let final_cmd_buf = cmd_buf_builder.build().unwrap();
+        partial.cmd_buf = partial
+            .cmd_buf
+            .begin_render_pass(framebuffer.clone(), false, clear_values)
+            .unwrap();
+
+        partial.current_pass = Some(PartialPass {
+            dims: pass_dims,
+            pass_idx: new_pass_idx,
+        });
+
+        self.partial = Some(partial);
+    }
+
+    pub fn draw_object<T: Drawcall>(&mut self, object: T) {
+        let mut partial = self.partial.take().unwrap();
+        let cur_pass = partial.current_pass.take().unwrap();
+
+        let pass_idx = cur_pass.pass_idx;
+        let pass = &self.passes[pass_idx];
+        let images = &partial.images;
+
+        // TODO: dynamic state is re-created for every object, shouldn't be
+        let dynamic_state = if let Some(dynstate) = object.custom_dynstate() {
+            dynstate
+        } else {
+            dynamic_state_for_dimensions(cur_pass.dims)
+        };
+
+        let pipeline = self.pipeline_caches[pass_idx].get(object.pipe_spec());
+
+        let mut collection =
+            self.collection_cache
+                .get(object.pipe_spec(), pipeline.clone(), &pass, &images);
+
+        let mut object_sets =
+            object.collection(self.queue.clone(), pipeline.clone(), collection.len());
+
+        collection.append(&mut object_sets);
+
+        partial.cmd_buf = partial.cmd_buf
+            .draw_indexed(
+                pipeline,
+                &dynamic_state,
+                vec![object.vbuf()],
+                object.ibuf(),
+                collection,
+                (),
+            )
+            .expect(&format!("error building cmd buf, in pass {}", pass.name));
+
+        partial.current_pass = Some(cur_pass);
+
+        self.partial = Some(partial);
+    }
+
+    pub fn finish_render<F: GpuFuture + 'static>(&mut self, future: F) -> Box<dyn GpuFuture> {
+        let partial = self.partial.take().unwrap();
+        let final_cmd_buf = partial.cmd_buf
+            .end_render_pass()
+            .unwrap()
+            .build()
+            .unwrap();
 
         Box::new(
             future
@@ -188,19 +261,11 @@ impl<'a> System<'a> {
         )
     }
 
-    pub fn render_to_window(
-        &mut self,
-        window: &mut Window,
-        objects: HashMap<&str, Vec<Arc<dyn Drawcall>>>,
-    ) {
-        let swapchain_image = window.next_image();
+    pub fn finish_to_window(&mut self, window: &mut Window) {
         let swapchain_fut = window.get_future();
 
         // render returns a future representing the completion of rendering
-        let frame_fut = self.render(
-            SwapchainImage::dimensions(&swapchain_image),
-            objects,
-            swapchain_image,
+        let frame_fut = self.finish_render(
             swapchain_fut,
         );
 

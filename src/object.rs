@@ -2,8 +2,8 @@ use vulkano::buffer::{BufferAccess, ImmutableBuffer};
 use vulkano::command_buffer::DynamicState;
 use vulkano::descriptor::DescriptorSet;
 use vulkano::device::Queue;
-use vulkano::pipeline::GraphicsPipelineAbstract;
 use vulkano::pipeline::input_assembly::PrimitiveTopology;
+use vulkano::pipeline::GraphicsPipelineAbstract;
 
 use crate::collection::Collection;
 use crate::mesh::{Mesh, MeshAbstract, Vertex, VertexType};
@@ -29,6 +29,7 @@ pub trait Drawcall {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>>;
     fn custom_dynstate(&self) -> Option<DynamicState>;
 }
@@ -46,8 +47,13 @@ impl<C: Collection> Drawcall for Object<C> {
         self.ibuf.clone()
     }
 
-    fn collection(&self, queue: Arc<Queue>, pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
-        self.collection.convert(queue, pipeline)
+    fn collection(
+        &self,
+        queue: Arc<Queue>,
+        pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
+    ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
+        self.collection.convert(queue, pipeline, set_idx_offset)
     }
 
     fn custom_dynstate(&self) -> Option<DynamicState> {
