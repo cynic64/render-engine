@@ -1,6 +1,5 @@
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::device::{Device, Queue};
-use vulkano::format::ClearValue;
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
 };
@@ -48,14 +47,8 @@ enum DrawState {
         pass_idx: usize,
         images: HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>,
         framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
-        cur_pass: PassInfo,
+        cur_dims: [u32; 2],
     },
-}
-
-struct PassInfo {
-    dimensions: [u32; 2],
-    framebuffer_idx: usize,
-    clear_values: Vec<ClearValue>,
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
@@ -148,22 +141,13 @@ impl<'a> System<'a> {
         .begin_render_pass(first_framebuffer, false, clear_values.clone())
         .unwrap();
 
-        // TODO: support passes with different dimensions
-        let pass_info = PassInfo {
-            // it's possible that passes use dimensions other than the
-            // destination image's, but we currently assume everything's the
-            // same :-(
-            dimensions,
-            framebuffer_idx: 0,
-            clear_values,
-        };
-
         self.state = DrawState::Drawing {
             cmd_buf: cmd_buf_builder,
             pass_idx: 0,
             images,
             framebuffers,
-            cur_pass: pass_info,
+            // TODO: support passes with different dimensions
+            cur_dims: dimensions,
         }
     }
 
@@ -184,9 +168,8 @@ impl<'a> System<'a> {
                 pass_idx,
                 images,
                 framebuffers,
-                cur_pass,
+                cur_dims,
             } => {
-                let dims = cur_pass.dimensions;
 
                 // TODO: dynamic state is re-created for every object, shouldn't be
                 let dynamic_state = if let Some(dynstate) = object.custom_dynstate() {
@@ -194,7 +177,7 @@ impl<'a> System<'a> {
                 } else {
                     // TODO: this is another spot preventing passes with
                     // different dimensions
-                    dynamic_state_for_dimensions(dims)
+                    dynamic_state_for_dimensions(cur_dims)
                 };
 
                 let pipeline = self.pipeline_caches[pass_idx].get(object.pipe_spec());
@@ -231,7 +214,7 @@ impl<'a> System<'a> {
                     pass_idx,
                     images,
                     framebuffers,
-                    cur_pass,
+                    cur_dims,
                 }
             }
         }
@@ -249,7 +232,7 @@ impl<'a> System<'a> {
                 mut pass_idx,
                 images,
                 framebuffers,
-                cur_pass,
+                cur_dims,
             } => {
                 pass_idx += 1;
 
@@ -269,7 +252,7 @@ impl<'a> System<'a> {
                     pass_idx,
                     images,
                     framebuffers,
-                    cur_pass,
+                    cur_dims,
                 }
             }
         }
