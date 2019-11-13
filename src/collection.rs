@@ -36,6 +36,7 @@ pub trait Collection {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>>;
 }
 
@@ -44,6 +45,7 @@ impl Collection for () {
         &self,
         _queue: Arc<Queue>,
         _pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        _set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![]
     }
@@ -54,9 +56,10 @@ impl<T: Set> Collection for (T,) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue, pipeline, 0)
+            self.0.upload(queue, pipeline, set_idx_offset)
         ]
     }
 }
@@ -66,10 +69,11 @@ impl<T1: Set, T2: Set> Collection for (T1, T2) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue.clone(), pipeline.clone(), 0),
-            self.1.upload(queue.clone(), pipeline.clone(), 1),
+            self.0.upload(queue.clone(), pipeline.clone(), set_idx_offset),
+            self.1.upload(queue.clone(), pipeline.clone(), set_idx_offset + 1),
         ]
     }
 }
@@ -79,11 +83,12 @@ impl<T1: Set, T2: Set, T3: Set> Collection for (T1, T2, T3) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue.clone(), pipeline.clone(), 0),
-            self.1.upload(queue.clone(), pipeline.clone(), 1),
-            self.2.upload(queue.clone(), pipeline.clone(), 2),
+            self.0.upload(queue.clone(), pipeline.clone(), set_idx_offset),
+            self.1.upload(queue.clone(), pipeline.clone(), set_idx_offset + 1),
+            self.2.upload(queue.clone(), pipeline.clone(), set_idx_offset + 2),
         ]
     }
 }
@@ -93,12 +98,13 @@ impl<T1: Set, T2: Set, T3: Set, T4: Set> Collection for (T1, T2, T3, T4) {
         &self,
         queue: Arc<Queue>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+        set_idx_offset: usize,
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
         vec![
-            self.0.upload(queue.clone(), pipeline.clone(), 0),
-            self.1.upload(queue.clone(), pipeline.clone(), 1),
-            self.2.upload(queue.clone(), pipeline.clone(), 2),
-            self.3.upload(queue.clone(), pipeline.clone(), 3),
+            self.0.upload(queue.clone(), pipeline.clone(), set_idx_offset),
+            self.1.upload(queue.clone(), pipeline.clone(), set_idx_offset + 1),
+            self.2.upload(queue.clone(), pipeline.clone(), set_idx_offset + 2),
+            self.3.upload(queue.clone(), pipeline.clone(), set_idx_offset + 3),
         ]
     }
 }
