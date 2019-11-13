@@ -238,7 +238,41 @@ impl<'a> System<'a> {
     }
 
     pub fn next_pass(&mut self) {
-        panic!("unimplemented")
+        // again, temporarily take ownership
+        let state = std::mem::replace(&mut self.state, DrawState::Uninitialized);
+        match state {
+            DrawState::Uninitialized => {
+                panic!("Can't enter next pass without having begun rendering")
+            }
+            DrawState::Drawing {
+                mut cmd_buf,
+                mut pass_idx,
+                images,
+                framebuffers,
+                cur_pass,
+            } => {
+                pass_idx += 1;
+
+                let framebuffer = framebuffers[pass_idx].clone();
+                let render_pass = self.passes[pass_idx].render_pass.clone();
+                let clear_values = clear_values_for_pass(render_pass);
+
+                cmd_buf = cmd_buf
+                    .end_render_pass()
+                    .unwrap()
+                    .begin_render_pass(framebuffer, false, clear_values)
+                    .unwrap();
+
+                // give state a real value again
+                self.state = DrawState::Drawing {
+                    cmd_buf,
+                    pass_idx,
+                    images,
+                    framebuffers,
+                    cur_pass,
+                }
+            }
+        }
     }
 
     pub fn finish<F: GpuFuture + 'static>(&mut self, future: F) -> Box<dyn GpuFuture> {
