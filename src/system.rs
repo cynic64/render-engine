@@ -172,7 +172,7 @@ impl<'a> System<'a> {
         self.start(swapchain_image);
     }
 
-    pub fn add_object<T: Drawcall>(&mut self, object: T) {
+    pub fn add_object<T: Drawcall>(&mut self, object: &T) {
         // we need to take ownership for a while
         let state = std::mem::replace(&mut self.state, DrawState::Uninitialized);
         match state {
