@@ -89,11 +89,11 @@ impl PipelineCache {
 
     pub fn print_stats(&self) {
         let avg: f32 =
-            self.stats.gen_times.iter().sum::<f32>() / (self.stats.gen_times.len() as f32);
+            self.stats.gen_times.iter().sum::<f32>() / (self.stats.gen_times.len() as f32) * 1_000.0;
         let percent =
             (self.stats.hits as f32) / ((self.stats.hits + self.stats.misses) as f32) * 100.0;
         println!(
-            "Hits: {}, misses: {}, {}%, avg. time taken to gen pipeline: {}",
+            "Hits: {}, misses: {}, {}%, avg. time taken to gen pipeline: {}ms",
             self.stats.hits, self.stats.misses, percent, avg
         );
     }

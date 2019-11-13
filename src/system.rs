@@ -104,6 +104,8 @@ impl<'a> System<'a> {
     }
 
     pub fn start(&mut self, dest_image: Arc<dyn ImageViewAccess + Send + Sync>) {
+        self.setup_timer.start();
+
         // all images will be created with the same dimensions as the
         // destination image. if you need to use an image with a different
         // resolution, use custom_images in System.
@@ -148,7 +150,11 @@ impl<'a> System<'a> {
             framebuffers,
             // TODO: support passes with different dimensions
             cur_dims: dimensions,
-        }
+        };
+
+        self.setup_timer.stop();
+        self.cmd_buf_timer.start();
+        self.pass_timers[0].start();
     }
 
     pub fn start_window(&mut self, window: &mut Window) {
@@ -170,7 +176,6 @@ impl<'a> System<'a> {
                 framebuffers,
                 cur_dims,
             } => {
-
                 // TODO: dynamic state is re-created for every object, shouldn't be
                 let dynamic_state = if let Some(dynstate) = object.custom_dynstate() {
                     dynstate
@@ -234,7 +239,9 @@ impl<'a> System<'a> {
                 framebuffers,
                 cur_dims,
             } => {
+                self.pass_timers[pass_idx].stop();
                 pass_idx += 1;
+                self.pass_timers[pass_idx].start();
 
                 let framebuffer = framebuffers[pass_idx].clone();
                 let render_pass = self.passes[pass_idx].render_pass.clone();
@@ -259,19 +266,31 @@ impl<'a> System<'a> {
     }
 
     pub fn finish<F: GpuFuture + 'static>(&mut self, future: F) -> Box<dyn GpuFuture> {
+        self.cmd_buf_timer.stop();
+        self.present_timer.start();
+
         let state = std::mem::replace(&mut self.state, DrawState::Uninitialized);
 
-        match state {
+        let fut = match state {
             DrawState::Uninitialized => panic!("Can't finish render without having begun it"),
-            DrawState::Drawing { cmd_buf, .. } => Box::new(
-                future
-                    .then_execute(
-                        self.queue.clone(),
-                        cmd_buf.end_render_pass().unwrap().build().unwrap(),
-                    )
-                    .unwrap(),
-            ),
-        }
+            DrawState::Drawing {
+                cmd_buf, pass_idx, ..
+            } => {
+                self.pass_timers[pass_idx].stop();
+                Box::new(
+                    future
+                        .then_execute(
+                            self.queue.clone(),
+                            cmd_buf.end_render_pass().unwrap().build().unwrap(),
+                        )
+                        .unwrap(),
+                )
+            }
+        };
+
+        self.present_timer.stop();
+
+        fut
     }
 
     pub fn finish_to_window(&mut self, window: &mut Window) {
