@@ -1,5 +1,6 @@
 use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
 use vulkano::device::{Device, Queue};
+use vulkano::format::ClearValue;
 use vulkano::framebuffer::{
     AttachmentDescription, Framebuffer, FramebufferAbstract, RenderPassAbstract,
 };
@@ -10,11 +11,11 @@ use vulkano::sync::GpuFuture;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::object::Drawcall;
 use crate::pipeline_cache::PipelineCache;
 use crate::render_passes::clear_values_for_pass;
 use crate::utils::Timer;
 use crate::window::Window;
-use crate::object::Drawcall;
 
 // TODO: make the whole thing less prone to runtime panics. vecs of strings are
 // a little sketchy. Maybe make a function that checks the system to ensure
@@ -31,10 +32,28 @@ pub struct System<'a> {
     pub output_tag: &'a str,
     cached_images: Option<HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>>,
     pub custom_images: HashMap<&'a str, Arc<dyn ImageViewAccess + Send + Sync>>,
+    state: DrawState,
     pass_timers: Vec<Timer>,
     cmd_buf_timer: Timer,
     present_timer: Timer,
     setup_timer: Timer,
+}
+
+enum DrawState {
+    Uninitialized,
+    Drawing {
+        cmd_buf: AutoCommandBufferBuilder,
+        pass_idx: usize,
+        images: HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>>,
+        framebuffers: Vec<Arc<dyn FramebufferAbstract + Send + Sync>>,
+        cur_pass: PassInfo,
+    },
+}
+
+struct PassInfo {
+    dimensions: [u32; 2],
+    framebuffer_idx: usize,
+    clear_values: Vec<ClearValue>,
 }
 
 // In the end all GPU programs come down to feeding a set of shaders some data
@@ -79,11 +98,155 @@ impl<'a> System<'a> {
             output_tag,
             cached_images: None,
             custom_images,
+            state: DrawState::Uninitialized,
             pass_timers,
             cmd_buf_timer: Timer::new("command buffer"),
             present_timer: Timer::new("present to window"),
             setup_timer: Timer::new("pass setup"),
         }
+    }
+
+    pub fn start(&mut self, dest_image: Arc<dyn ImageViewAccess + Send + Sync>) {
+        // all images will be created with the same dimensions as the
+        // destination image. if you need to use an image with a different
+        // resolution, use custom_images in System.
+        let dimensions = [
+            dest_image.dimensions().width(),
+            dest_image.dimensions().height(),
+        ];
+
+        // create all images and framebuffers
+        let mut images = self.get_images(dimensions);
+
+        // replace destination image with the real one
+        images.insert(self.output_tag.to_string(), dest_image);
+
+        // use any custom images to replace existing ones
+        for (tag, image) in self.custom_images.iter() {
+            images.insert(tag.to_string(), image.clone());
+        }
+
+        let framebuffers = framebuffers_for_passes(images.clone(), &self.passes);
+
+        // when you begin rendering, you automatically enter the first pass (for
+        // which the first framebuffer is used)
+        let first_framebuffer = framebuffers[0].clone();
+        let first_render_pass = self.passes[0].render_pass.clone();
+
+        let clear_values = clear_values_for_pass(first_render_pass);
+
+        // create the command buffer and enter first render pass
+        let cmd_buf_builder = AutoCommandBufferBuilder::primary_one_time_submit(
+            self.device.clone(),
+            self.queue.family(),
+        )
+        .unwrap()
+        .begin_render_pass(first_framebuffer, false, clear_values.clone())
+        .unwrap();
+
+        // TODO: support passes with different dimensions
+        let pass_info = PassInfo {
+            // it's possible that passes use dimensions other than the
+            // destination image's, but we currently assume everything's the
+            // same :-(
+            dimensions,
+            framebuffer_idx: 0,
+            clear_values,
+        };
+
+        self.state = DrawState::Drawing {
+            cmd_buf: cmd_buf_builder,
+            pass_idx: 0,
+            images,
+            framebuffers,
+            cur_pass: pass_info,
+        }
+    }
+
+    pub fn start_window(&mut self, window: &mut Window) {
+        let swapchain_image = window.next_image();
+        self.start(swapchain_image);
+    }
+
+    pub fn add_object<T: Drawcall>(&mut self, object: T) {
+        // we need to take ownership for a while
+        let state = std::mem::replace(&mut self.state, DrawState::Uninitialized);
+        match state {
+            DrawState::Uninitialized => {
+                panic!("You tried to render an object without calling begin_render first!")
+            }
+            DrawState::Drawing {
+                mut cmd_buf,
+                pass_idx,
+                images,
+                framebuffers,
+                cur_pass,
+            } => {
+                let dims = cur_pass.dimensions;
+
+                // TODO: dynamic state is re-created for every object, shouldn't be
+                let dynamic_state = if let Some(dynstate) = object.custom_dynstate() {
+                    dynstate
+                } else {
+                    // TODO: this is another spot preventing passes with
+                    // different dimensions
+                    dynamic_state_for_dimensions(dims)
+                };
+
+                let pipeline = self.pipeline_caches[pass_idx].get(object.pipe_spec());
+
+                let collection = object.collection(self.queue.clone(), pipeline.clone());
+
+                cmd_buf = cmd_buf
+                    .draw_indexed(
+                        pipeline,
+                        &dynamic_state,
+                        vec![object.vbuf()],
+                        object.ibuf(),
+                        collection,
+                        (),
+                    )
+                    .expect(&format!(
+                        "error building cmd buf, in pass {}",
+                        self.passes[pass_idx].name
+                    ));
+
+                // give state a real value again
+                self.state = DrawState::Drawing {
+                    cmd_buf,
+                    pass_idx,
+                    images,
+                    framebuffers,
+                    cur_pass,
+                }
+            }
+        }
+    }
+
+    pub fn next_pass(&mut self) {
+        panic!("unimplemented")
+    }
+
+    pub fn finish<F: GpuFuture + 'static>(&mut self, future: F) -> Box<dyn GpuFuture> {
+        let state = std::mem::replace(&mut self.state, DrawState::Uninitialized);
+
+        match state {
+            DrawState::Uninitialized => panic!("Can't finish render without having begun it"),
+            DrawState::Drawing { cmd_buf, .. } => Box::new(
+                future
+                    .then_execute(
+                        self.queue.clone(),
+                        cmd_buf.end_render_pass().unwrap().build().unwrap(),
+                    )
+                    .unwrap(),
+            ),
+        }
+    }
+
+    pub fn finish_to_window(&mut self, window: &mut Window) {
+        let swapchain_fut = window.get_future();
+        let cmd_buf_fut = self.finish(swapchain_fut);
+        window.present_future(cmd_buf_fut);
     }
 
     pub fn render<F>(
@@ -158,8 +321,7 @@ impl<'a> System<'a> {
 
                 let pipeline = self.pipeline_caches[pass_idx].get(object.pipe_spec());
 
-                let collection = object
-                    .collection(self.queue.clone(), pipeline.clone());
+                let collection = object.collection(self.queue.clone(), pipeline.clone());
 
                 cmd_buf_builder = cmd_buf_builder
                     .draw_indexed(
