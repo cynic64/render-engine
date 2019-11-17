@@ -15,12 +15,14 @@ use re_ll::vk_window::VkWindow;
 
 use crate::input::{EventHandler, FrameInfo};
 use crate::render_passes;
+use crate::utils::Timer;
 
 pub struct Window {
     vk_window: VkWindow,
     event_handler: EventHandler,
     queue: Arc<Queue>,
     recenter: bool,
+    update_timer: Timer,
 }
 
 impl Window {
@@ -57,6 +59,7 @@ impl Window {
             event_handler,
             queue: queue.clone(),
             recenter: true,
+            update_timer: Timer::new("Avg. time to update window"),
         };
 
         (window, queue)
@@ -70,17 +73,21 @@ impl Window {
         self.vk_window.next_image()
     }
 
-    pub fn get_future(&mut self) -> SwapchainAcquireFuture<winit::Window> {
+    pub fn get_future(&mut self) -> Box<dyn GpuFuture> {
         self.vk_window.get_future()
     }
 
     pub fn update(&mut self) -> bool {
+        self.update_timer.start();
+
         // returns whether to exit the program or not
         // TODO: return an enum or move the done-checking to its own function
         let done = self.event_handler.update(self.get_dimensions());
         if self.recenter {
             self.recenter_cursor();
         }
+
+        self.update_timer.stop();
 
         done
     }
@@ -110,6 +117,7 @@ impl Window {
         self.vk_window.get_dimensions()
     }
 
+    // TODO: make these more consistent
     pub fn get_fps(&self) -> f32 {
         // TODO: move fps counting to Window instead of EventHandler
         self.event_handler.get_fps()
@@ -117,6 +125,10 @@ impl Window {
 
     pub fn get_avg_delta(&self) -> f32 {
         self.event_handler.avg_delta()
+    }
+
+    pub fn print_avg_update(&self) {
+        self.update_timer.print();
     }
 
     pub fn get_frame_info(&self) -> FrameInfo {

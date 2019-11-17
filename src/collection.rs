@@ -31,7 +31,34 @@ use std::sync::Arc;
 // means that if it panics it will panic there and not in render_frame, where it
 // is harder to track down.
 
-pub trait Collection {
+#[derive(Clone)]
+pub struct Collection<T: CollectionUpload> {
+    pub data: T,
+    gpu_data: Option<Vec<Arc<dyn DescriptorSet + Send + Sync>>>,
+    pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
+    set_idx_offset: usize,
+}
+
+impl<T: CollectionUpload> Collection<T> {
+    pub fn new(data: T, pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>, set_idx_offset: usize) -> Self {
+        Self {
+            data,
+            gpu_data: None,
+            pipeline,
+            set_idx_offset,
+        }
+    }
+
+    pub fn upload(&mut self, queue: Arc<Queue>) {
+        self.gpu_data = Some(self.data.convert(queue, self.pipeline.clone(), self.set_idx_offset));
+    }
+
+    pub fn get(&self) -> Vec<Arc<dyn DescriptorSet + Send + Sync>> {
+        self.gpu_data.as_ref().expect("Collection not uploaded").clone()
+    }
+}
+
+pub trait CollectionUpload {
     fn convert(
         &self,
         queue: Arc<Queue>,
@@ -40,7 +67,7 @@ pub trait Collection {
     ) -> Vec<Arc<dyn DescriptorSet + Send + Sync>>;
 }
 
-impl Collection for () {
+impl CollectionUpload for () {
     fn convert(
         &self,
         _queue: Arc<Queue>,
@@ -51,7 +78,7 @@ impl Collection for () {
     }
 }
 
-impl<T: Set> Collection for (T,) {
+impl<T: Set> CollectionUpload for (T,) {
     fn convert(
         &self,
         queue: Arc<Queue>,
@@ -64,7 +91,7 @@ impl<T: Set> Collection for (T,) {
     }
 }
 
-impl<T1: Set, T2: Set> Collection for (T1, T2) {
+impl<T1: Set, T2: Set> CollectionUpload for (T1, T2) {
     fn convert(
         &self,
         queue: Arc<Queue>,
@@ -78,7 +105,7 @@ impl<T1: Set, T2: Set> Collection for (T1, T2) {
     }
 }
 
-impl<T1: Set, T2: Set, T3: Set> Collection for (T1, T2, T3) {
+impl<T1: Set, T2: Set, T3: Set> CollectionUpload for (T1, T2, T3) {
     fn convert(
         &self,
         queue: Arc<Queue>,
@@ -93,7 +120,7 @@ impl<T1: Set, T2: Set, T3: Set> Collection for (T1, T2, T3) {
     }
 }
 
-impl<T1: Set, T2: Set, T3: Set, T4: Set> Collection for (T1, T2, T3, T4) {
+impl<T1: Set, T2: Set, T3: Set, T4: Set> CollectionUpload for (T1, T2, T3, T4) {
     fn convert(
         &self,
         queue: Arc<Queue>,

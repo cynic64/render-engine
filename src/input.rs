@@ -72,7 +72,7 @@ impl EventHandler {
         let mut cursor_pos = None;
 
         self.events_loop.poll_events(|ev| {
-            match ev.clone() {
+            match ev {
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,
                     ..

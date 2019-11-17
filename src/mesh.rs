@@ -14,8 +14,6 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 use std::any::Any;
 
-// TODO: instead of having arc<dyn vertexlist>, give mesh a type parameter and
-// create a MeshAbstract type.
 #[derive(Clone)]
 pub struct Mesh<V: Vertex> {
     pub vertices: Vec<V>,

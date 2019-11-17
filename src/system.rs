@@ -37,6 +37,7 @@ pub struct System<'a> {
     pass_timers: Vec<Timer>,
     cmd_buf_timer: Timer,
     present_timer: Timer,
+    acquire_timer: Timer,
     setup_timer: Timer,
 }
 
@@ -99,7 +100,8 @@ impl<'a> System<'a> {
             pass_timers,
             cmd_buf_timer: Timer::new("command buffer"),
             present_timer: Timer::new("present to window"),
-            setup_timer: Timer::new("pass setup"),
+            acquire_timer: Timer::new("acquire image from window"),
+            setup_timer: Timer::new("frame setup"),
         }
     }
 
@@ -158,7 +160,9 @@ impl<'a> System<'a> {
     }
 
     pub fn start_window(&mut self, window: &mut Window) {
+        self.acquire_timer.start();
         let swapchain_image = window.next_image();
+        self.acquire_timer.stop();
         self.start(swapchain_image);
     }
 
@@ -195,7 +199,7 @@ impl<'a> System<'a> {
                 );
 
                 let mut obj_collection =
-                    object.collection(self.queue.clone(), pipeline.clone(), collection.len());
+                    object.collection();
 
                 collection.append(&mut obj_collection);
 
@@ -267,7 +271,6 @@ impl<'a> System<'a> {
 
     pub fn finish<F: GpuFuture + 'static>(&mut self, future: F) -> Box<dyn GpuFuture> {
         self.cmd_buf_timer.stop();
-        self.present_timer.start();
 
         let state = std::mem::replace(&mut self.state, DrawState::Uninitialized);
 
@@ -288,15 +291,17 @@ impl<'a> System<'a> {
             }
         };
 
-        self.present_timer.stop();
-
         fut
     }
 
     pub fn finish_to_window(&mut self, window: &mut Window) {
+        self.present_timer.start();
+
         let swapchain_fut = window.get_future();
         let cmd_buf_fut = self.finish(swapchain_fut);
         window.present_future(cmd_buf_fut);
+
+        self.present_timer.stop();
     }
 
     pub fn get_passes(&self) -> &[Pass] {
@@ -309,6 +314,7 @@ impl<'a> System<'a> {
         self.cmd_buf_timer.print();
         self.present_timer.print();
         self.setup_timer.print();
+        self.acquire_timer.print();
         self.pass_timers.iter().for_each(|timer| timer.print());
 
         println!();
