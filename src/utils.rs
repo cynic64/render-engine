@@ -76,6 +76,8 @@ pub fn default_sampler(device: Arc<Device>) -> Arc<Sampler> {
 }
 
 // used for averaging times for benchmarks
+// TODO: rename this to AverageTimer to make the difference between it and
+// Stopwatch clearer
 pub struct Timer {
     name: String,
     total_time: f32,
@@ -111,5 +113,22 @@ impl Timer {
             self.name,
             self.total_time / (self.samples as f32) * 1_000.0
         );
+    }
+}
+
+pub struct Stopwatch {
+    start_time: Instant,
+}
+
+impl Stopwatch {
+    pub fn new() -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+        }
+    }
+
+    pub fn stop(&self, message: &str) {
+        let elapsed = get_elapsed(self.start_time);
+        println!("{}: {}ms", message, elapsed * 1_000.0);
     }
 }
