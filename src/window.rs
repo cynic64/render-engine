@@ -2,7 +2,7 @@ use vulkano::device::{Device, DeviceExtensions, Queue};
 use vulkano::framebuffer::RenderPassAbstract;
 use vulkano::image::SwapchainImage;
 use vulkano::instance::{Instance, PhysicalDevice};
-use vulkano::swapchain::{SwapchainAcquireFuture, Surface};
+use vulkano::swapchain::Surface;
 use vulkano::sync::GpuFuture;
 
 use vulkano_win::VkSurfaceBuild;

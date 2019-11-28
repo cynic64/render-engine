@@ -10,6 +10,9 @@ type RenderPass = Arc<dyn RenderPassAbstract + Send + Sync>;
 const DEFAULT_COLOR_FORMAT: Format = vulkano::format::Format::B8G8R8A8Unorm;
 const DEFAULT_DEPTH_FORMAT: Format = vulkano::format::Format::D32Sfloat;
 
+// TODO: resolve_depth is not needed. I think, at least - programs run without
+// it, but make sure no jaggedness in introduced by removing it.
+
 pub fn multisampled_with_depth(device: Arc<Device>, factor: u32) -> RenderPass {
     Arc::new(
         vulkano::single_pass_renderpass!(

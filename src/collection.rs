@@ -46,7 +46,7 @@ use vulkano::device::Queue;
 use vulkano::image::ImageViewAccess;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 
-use crate::utils::{bufferize_data, default_sampler, Stopwatch};
+use crate::utils::{bufferize_data, default_sampler};
 
 use std::sync::Arc;
 
