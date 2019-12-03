@@ -7,7 +7,7 @@ use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::pipeline::{GraphicsPipelineAbstract, GraphicsPipeline};
 use vulkano::pipeline::depth_stencil::{DepthStencil, Compare};
 
-use crate::utils::bufferize_slice;
+use crate::utils::immutable_slice;
 use crate::shaders::ShaderSystem;
 
 use std::sync::Arc;
@@ -32,11 +32,11 @@ pub trait MeshAbstract {
 
 impl<V: Vertex> MeshAbstract for Mesh<V> {
     fn get_vbuf(&self, queue: Arc<Queue>) -> Arc<dyn BufferAccess + Send + Sync> {
-        bufferize_slice(queue, &self.vertices)
+        immutable_slice(queue, &self.vertices)
     }
 
     fn get_ibuf(&self, queue: Arc<Queue>) -> Arc<ImmutableBuffer<[u32]>> {
-        bufferize_slice(queue, &self.indices)
+        immutable_slice(queue, &self.indices)
     }
 
     fn get_vtype(&self) -> Arc<dyn VertexTypeAbstract> {

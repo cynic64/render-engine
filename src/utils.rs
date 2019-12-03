@@ -1,10 +1,10 @@
-use vulkano::buffer::{BufferUsage, ImmutableBuffer};
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer};
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
 use vulkano::image::{Dimensions, ImageViewAccess, ImmutableImage};
 use vulkano::memory::Content;
-use vulkano::sync::GpuFuture;
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode};
+use vulkano::sync::GpuFuture;
 
 use crate::input::get_elapsed;
 
@@ -12,22 +12,35 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-pub fn bufferize_slice<T: Content + 'static + Send + Sync + Clone>(
+pub fn immutable_slice<T: Content + 'static + Send + Sync + Clone>(
     queue: Arc<Queue>,
     slice: &[T],
 ) -> Arc<ImmutableBuffer<[T]>> {
+    // The only reason this isn't used everywhere in render-engine is that
+    // creating an immutable buffer also creates a command buffer to copy data
+    // into it for some reason, which slows down command buffer submission.
+    // Therefore, you should use this for things that are uploaded once, and use
+    // upload_data for things you upload every frame (even if you don't mutate
+    // between uploads).
     ImmutableBuffer::from_iter(slice.iter().cloned(), BufferUsage::all(), queue)
         .unwrap()
         .0
 }
 
-pub fn bufferize_data<T: Content + 'static + Send + Sync>(
+pub fn immutable_data<T: Content + 'static + Send + Sync>(
     queue: Arc<Queue>,
     data: T,
 ) -> Arc<ImmutableBuffer<T>> {
     ImmutableBuffer::from_data(data, BufferUsage::all(), queue)
         .unwrap()
         .0
+}
+
+pub fn upload_data<T: Content + 'static + Send + Sync>(
+    device: Arc<Device>,
+    data: T,
+) -> Arc<CpuAccessibleBuffer<T>> {
+    CpuAccessibleBuffer::from_data(device, BufferUsage::all(), data).unwrap()
 }
 
 pub fn load_texture(

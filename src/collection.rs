@@ -22,12 +22,12 @@ underlying data.
 
 let mut set = Set::new(
     (some_struct,),
-    queue,
+    device,
     pipeline,
     0      // set idx
 );
 set.data.0 = updated_struct;
-set.upload(queue);
+set.upload(device);
 
 Ta-da! Now to collections. Collection is a trait implemented for all* tuples of
 sets that allows converting them into Vec<Arc<DescriptorSet>>, which is most
@@ -42,11 +42,11 @@ type that can be used in draw and draw_indexed. How magnificently mediocre.
  */
 
 use vulkano::descriptor::descriptor_set::{DescriptorSet, PersistentDescriptorSet};
-use vulkano::device::Queue;
+use vulkano::device::Device;
 use vulkano::image::ImageViewAccess;
 use vulkano::pipeline::GraphicsPipelineAbstract;
 
-use crate::utils::{bufferize_data, default_sampler};
+use crate::utils::{upload_data, default_sampler};
 
 use std::sync::Arc;
 
@@ -95,7 +95,7 @@ pub trait CollectionData {
 
     fn create_sets(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx_offset: usize,
     ) -> Self::Sets;
@@ -106,7 +106,7 @@ impl CollectionData for () {
 
     fn create_sets(
         &self,
-        _queue: Arc<Queue>,
+        _device: Arc<Device>,
         _pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         _set_idx_offset: usize,
     ) -> Self::Sets {
@@ -118,11 +118,11 @@ impl<T1: SetUpload> CollectionData for (T1,) {
 
     fn create_sets(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx_offset: usize,
     ) -> Self::Sets {
-        let set1 = Set::new(self.0.clone(), queue, pipeline, set_idx_offset);
+        let set1 = Set::new(self.0.clone(), device, pipeline, set_idx_offset);
 
         (set1,)
     }
@@ -133,19 +133,19 @@ impl<T1: SetUpload, T2: SetUpload> CollectionData for (T1, T2) {
 
     fn create_sets(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx_offset: usize,
     ) -> Self::Sets {
         let set1 = Set::new(
             self.0.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset,
         );
         let set2 = Set::new(
             self.1.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset + 1,
         );
@@ -159,25 +159,25 @@ impl<T1: SetUpload, T2: SetUpload, T3: SetUpload> CollectionData for (T1, T2, T3
 
     fn create_sets(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx_offset: usize,
     ) -> Self::Sets {
         let set1 = Set::new(
             self.0.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset,
         );
         let set2 = Set::new(
             self.1.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset + 1,
         );
         let set3 = Set::new(
             self.2.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset + 2,
         );
@@ -193,31 +193,31 @@ impl<T1: SetUpload, T2: SetUpload, T3: SetUpload, T4: SetUpload> CollectionData
 
     fn create_sets(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx_offset: usize,
     ) -> Self::Sets {
         let set1 = Set::new(
             self.0.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset,
         );
         let set2 = Set::new(
             self.1.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset + 1,
         );
         let set3 = Set::new(
             self.2.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset + 2,
         );
         let set4 = Set::new(
             self.3.clone(),
-            queue.clone(),
+            device.clone(),
             pipeline.clone(),
             set_idx_offset + 3,
         );
@@ -239,12 +239,12 @@ pub struct Set<T: SetUpload> {
 impl<T: SetUpload> Set<T> {
     pub fn new(
         data: T,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Self {
         // creates a new set and immediately uploads the data to the GPU
-        let gpu_data = data.upload(queue, pipeline.clone(), set_idx);
+        let gpu_data = data.upload(device, pipeline.clone(), set_idx);
         Self {
             data,
             cached: gpu_data,
@@ -257,15 +257,15 @@ impl<T: SetUpload> Set<T> {
         self.cached.clone()
     }
 
-    pub fn upload(&mut self, queue: Arc<Queue>) {
-        self.cached = self.data.upload(queue, self.pipeline.clone(), self.set_idx);
+    pub fn upload(&mut self, device: Arc<Device>) {
+        self.cached = self.data.upload(device, self.pipeline.clone(), self.set_idx);
     }
 }
 
 pub trait SetUpload: Clone {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync>;
@@ -275,11 +275,11 @@ pub trait SetUpload: Clone {
 impl<T: Data> SetUpload for (T,) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let buffer = bufferize_data(queue.clone(), self.0.clone());
+        let buffer = upload_data(device.clone(), self.0.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -294,11 +294,11 @@ impl<T: Data> SetUpload for (T,) {
 impl SetUpload for (Image,) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
+        let sampler = default_sampler(device.clone());
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
                 .add_sampled_image(self.0.clone(), sampler)
@@ -313,12 +313,12 @@ impl SetUpload for (Image,) {
 impl<T1: Data, T2: Data> SetUpload for (T1, T2) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let buffer1 = bufferize_data(queue.clone(), self.0.clone());
-        let buffer2 = bufferize_data(queue.clone(), self.1.clone());
+        let buffer1 = upload_data(device.clone(), self.0.clone());
+        let buffer2 = upload_data(device.clone(), self.1.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -335,12 +335,12 @@ impl<T1: Data, T2: Data> SetUpload for (T1, T2) {
 impl<T: Data> SetUpload for (Image, T) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer2 = bufferize_data(queue.clone(), self.1.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer2 = upload_data(device.clone(), self.1.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -357,12 +357,12 @@ impl<T: Data> SetUpload for (Image, T) {
 impl<T: Data> SetUpload for (T, Image) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer1 = bufferize_data(queue.clone(), self.0.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer1 = upload_data(device.clone(), self.0.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -379,11 +379,11 @@ impl<T: Data> SetUpload for (T, Image) {
 impl SetUpload for (Image, Image) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
+        let sampler = default_sampler(device.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -401,13 +401,13 @@ impl SetUpload for (Image, Image) {
 impl<T1: Data, T2: Data, T3: Data> SetUpload for (T1, T2, T3) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let buffer1 = bufferize_data(queue.clone(), self.0.clone());
-        let buffer2 = bufferize_data(queue.clone(), self.1.clone());
-        let buffer3 = bufferize_data(queue.clone(), self.2.clone());
+        let buffer1 = upload_data(device.clone(), self.0.clone());
+        let buffer2 = upload_data(device.clone(), self.1.clone());
+        let buffer3 = upload_data(device.clone(), self.2.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -426,13 +426,13 @@ impl<T1: Data, T2: Data, T3: Data> SetUpload for (T1, T2, T3) {
 impl<T1: Data, T2: Data> SetUpload for (Image, T1, T2) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer2 = bufferize_data(queue.clone(), self.1.clone());
-        let buffer3 = bufferize_data(queue.clone(), self.2.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer2 = upload_data(device.clone(), self.1.clone());
+        let buffer3 = upload_data(device.clone(), self.2.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -451,13 +451,13 @@ impl<T1: Data, T2: Data> SetUpload for (Image, T1, T2) {
 impl<T1: Data, T2: Data> SetUpload for (T1, Image, T2) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer1 = bufferize_data(queue.clone(), self.0.clone());
-        let buffer3 = bufferize_data(queue.clone(), self.2.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer1 = upload_data(device.clone(), self.0.clone());
+        let buffer3 = upload_data(device.clone(), self.2.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -476,13 +476,13 @@ impl<T1: Data, T2: Data> SetUpload for (T1, Image, T2) {
 impl<T1: Data, T2: Data> SetUpload for (T1, T2, Image) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer1 = bufferize_data(queue.clone(), self.0.clone());
-        let buffer2 = bufferize_data(queue.clone(), self.1.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer1 = upload_data(device.clone(), self.0.clone());
+        let buffer2 = upload_data(device.clone(), self.1.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -501,12 +501,12 @@ impl<T1: Data, T2: Data> SetUpload for (T1, T2, Image) {
 impl<T: Data> SetUpload for (T, Image, Image) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer1 = bufferize_data(queue.clone(), self.0.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer1 = upload_data(device.clone(), self.0.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -525,12 +525,12 @@ impl<T: Data> SetUpload for (T, Image, Image) {
 impl<T: Data> SetUpload for (Image, T, Image) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer2 = bufferize_data(queue.clone(), self.1.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer2 = upload_data(device.clone(), self.1.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -549,12 +549,12 @@ impl<T: Data> SetUpload for (Image, T, Image) {
 impl<T: Data> SetUpload for (Image, Image, T) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
-        let buffer3 = bufferize_data(queue.clone(), self.2.clone());
+        let sampler = default_sampler(device.clone());
+        let buffer3 = upload_data(device.clone(), self.2.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
@@ -573,11 +573,11 @@ impl<T: Data> SetUpload for (Image, Image, T) {
 impl SetUpload for (Image, Image, Image) {
     fn upload(
         &self,
-        queue: Arc<Queue>,
+        device: Arc<Device>,
         pipeline: Arc<dyn GraphicsPipelineAbstract + Send + Sync>,
         set_idx: usize,
     ) -> Arc<dyn DescriptorSet + Send + Sync> {
-        let sampler = default_sampler(queue.device().clone());
+        let sampler = default_sampler(device.clone());
 
         Arc::new(
             PersistentDescriptorSet::start(pipeline, set_idx)
