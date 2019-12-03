@@ -35,14 +35,6 @@ pub fn multisampled_with_depth(device: Arc<Device>, factor: u32) -> RenderPass {
                     store: DontCare,
                     format: DEFAULT_DEPTH_FORMAT,
                     samples: factor,
-                },
-                resolve_depth: {
-                    load: DontCare,
-                    store: DontCare,
-                    format: DEFAULT_DEPTH_FORMAT,
-                    samples: 1,
-                    initial_layout: ImageLayout::Undefined,
-                    final_layout: ImageLayout::DepthStencilAttachmentOptimal,
                 }
             },
             pass: {
