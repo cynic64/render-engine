@@ -435,15 +435,35 @@ fn images_for_passes<'a>(
     passes: &'a [Pass],
 ) -> HashMap<String, Arc<dyn ImageViewAccess + Send + Sync>> {
     // for now this ignores the fact that the output image is special and
-    // provided from outside System. any users of this function should replace
-    // that image with the real one afterwards.
+    // provided from outside System if drawing to a window. any users of this
+    // function should replace that image with the real one afterwards.
+
     let mut images = HashMap::new();
     for pass in passes.iter() {
+        let num_tags = pass.images_created_tags.len();
+        let num_rpass_images = pass.render_pass.num_attachments();
+
+        assert!(num_rpass_images == num_tags, "There are a different number of image tags ({}) than images in the render pass ({}) for pass {}!
+This means the image description for each tag cannot be determined from the render pass!",
+                num_tags,
+                num_rpass_images,
+                pass.name,
+        );
+
         for (image_idx, &image_tag) in pass.images_created_tags.iter().enumerate() {
             let desc = pass
                 .render_pass
                 .attachment_desc(image_idx)
-                .expect("Couldn't get the attachment description when creating images for passes");
+                .expect(&format!(
+                    "Couldn't get the attachment description when creating images for passes.
+
+Dimensions we're supposed to be creating for: {:?}
+Image index we tried to create: {}
+Image tag: {}",
+                    dimensions,
+                    image_idx,
+                    image_tag,
+                ));
 
             // FIXME: yeah this needs a better solution
             let image = if image_tag.contains("lowres") {
