@@ -3,7 +3,7 @@
 This is a 3D rendering engine for the Rust programming language based on an existing Rust Vulkan library (Vulkano). It is relatively complete, but not actively maintained because I have abandoned it to switch to Ash from Vulkano.
 
 ## Screenshots & Videos
-<a href="http://www.youtube.com/watch?feature=player_embedded&v=UrnSCpf_yw0" target="_blank"><img src="http://img.youtube.com/vi/UrnSCpf_yw0/0.jpg" alt="WIP Rust Rendering Engine" width="1600" height="900" border="10" /></a>
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=UrnSCpf_yw0" target="_blank"><img src="http://img.youtube.com/vi/UrnSCpf_yw0/0.jpg" alt="WIP Rust Rendering Engine" width="800" height="450" border="10" /></a>
 
 ![](https://raw.githubusercontent.com/cynic64/tests-render-engine/master/screenshots/lighting.png)
 Lighting demo using Blinn-Phong shading with ambient, diffuse, specular and normal maps
