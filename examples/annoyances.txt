@@ -1,0 +1,3 @@
+- i don't want to manage device and queue
+- things need to be safer. Maybe replace custom_sets with some struct that makes sure everything is in the right place
+- apparently set_idx when passed to PersistentDescriptorSetBuilder just doesn't matter, may as well always make it 0

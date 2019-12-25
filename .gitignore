@@ -4,3 +4,5 @@ Cargo.lock
 \#*\#
 epic-error.txt
 expanded.rs
+examples/target
+render-engine/target

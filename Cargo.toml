@@ -1,20 +1,5 @@
-[package]
-name = "render-engine"
-version = "0.1.0"
-authors = ["cynic64 <f3bl@gmx.com>"]
-edition = "2018"
-
-[dependencies]
-vulkano = "0.14"
-vulkano-win = "0.14"
-vulkano-shaders = "0.14"
-winit = "0.19"
-cgmath = "0.17"
-image = "0.21"
-time = "0.1.38"
-nalgebra-glm = "0.4"
-re-ll = { path = "../re-ll" }
-shade_runner = "0.2.0"
-
-[profile.release]
-debug = true
+[workspace]
+members = [
+    "render-engine",
+    "examples",
+]

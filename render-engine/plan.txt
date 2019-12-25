@@ -1,0 +1,88 @@
+even more plans:
+- low-level module: only functions, all taking loads of arguments n stuff
+
+the interesting bits of the program are:
+    - deciding what to do: whether to draw to an image, a winit window, etc.
+    - creating the render pass
+    - deciding the type of the vertex buffer and which shaders are to be used
+    - creating the pipeline
+    - handling input (i like the current system a lot)
+    - creating the command buffer
+
+drawing to a window and an image might be similar enough that generic code can be used for both.
+compute shaders, however, are so different that a different system should be used for them entirely.
+
+------
+Need more modularity
+    World makes it easier to create vertices and shaders (meshes and materials)
+------
+Clean up namespaces, don't put everything in app (use sub-structs instead)
+Typedefs for things like the swapchain, images, swapchain-image-tuple, + more
+Figure out exactly how event handling should work. Clear it every frame? Clone it so the user can modify app without having to do annoying closure workarounds? and ofc provide all possiblities as options.
+Move -everything- that can possibly be simplified into functions, then wrappers around those functions from the app, then default function from the app that provide default values like 4x for MSAA and so on.
+    A possible pattern to use:
+    let mut pb = PipelineBuilder::default()
+    pb.whatever = custom_setting
+    pb.build()
+
+try and figure out a way to split out some dependencies. For example, not everyone needs nalgebra for an MVP if they are only doing 2D graphics
+maybe app_3d and app_2d? or just make 2d use an ortho camera (probably best)
+run clippy
+channels for lots of things. For example, for the camera, add a multiple-sender-single-reciever channel for a thread that constantly runs.
+    anybody can clone the sender and send instructions (from an enum), like CameraInstruction::MoveForward
+make sure users can use their own version of stuff. if they want their own camera, make that possible.
+make sure frame delays don't build up. Say something is using channels to send information. If there is a 1-frame delay on those
+    messages being processed, and they do sth else that is delayed, it will become a big problem at 60 fps.
+    to test it send some messages (for example move camera right), record the timestamp of the message being sent,
+        and record the timestamp of the action being taken and compare the difference
+figure out why fifo delays input so much
+    - asynchronously call draw_frame?
+    - maybe spawn a second thread that just runs submit_and_check over and over and use channels to send the cmd
+        buffer to it and everything
+------
+
+- first code a simple rotating textured cube or something, then make the corresponding library
+- then code what a basic 3D snake game should look like, then improve the corresponding library
+
+- provide high and low-level options.
+    - High level: load a model, create a material (include option to use PBR style settings or use own shader), set scale and position and done
+
+- one major thing to decide: how to handle modifications to meshes and materials
+- how can the user communicate with the GPU?
+- maybe provide direct access to vulkano (the device, queue, etc) for advanced users and niche uses
+- maybe provide a structure where if a variable is changed, the changes are automatically propagated to the GPU
+- things should be as modular as possible, and the user should be able to implement their own versions of functions
+- research traits and generics
+
+Basic Structure:
+    - update only when the user wants to (perhaps also provide an immediate mode that is less focused on performance but updates after every change)
+    - implement batch-mode first because immediate mode can be built on top of that
+    - decide whether to let input handling up to the user or part of the library (i think seperate from library is better)
+    - split the library into as many individual parts as possible
+        - eventual pieces:
+            - PBR -> shader converter
+            - Mesh loading and generating library
+            - Camera library
+            - World library for storing and positioning multiple meshes that may be rotated, scaled, etc.
+            - Debugging module? stuff like overlays
+            - Maybe a macro library for making things shorter
+                - instead of sth like "createcube(...); position_obj(...); scale_obj(...)", "cubeAt!(...)"
+            - An OPTIONAL library that wraps all these together - it needs to be possible to use them individually too
+    - when you create an object, it should return a reference to that object that allows modifying it in whatever way
+
+- compare performance with my library vs pure vulkano
+
+todo:
+    - try own traits
+    - look at existing rendering engines:
+        - wickedengine
+        - unreal
+        - rendy
+        - three.js
+    - look for sth to use for a gui
+        - i think dear imgui bindings exist for rust
+    - make a demo as soon as possible
+    - get more experience with render passes
+    - research ecs
+        - try using typedef instead of struct with one field
+    - try multithreaded submissions to vulkano
