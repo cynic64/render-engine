@@ -2,4 +2,8 @@
 members = [
     "render-engine",
     "examples",
+    "re-ll",
 ]
+
+[profile.dev]
+opt-level = 3

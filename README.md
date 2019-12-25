@@ -1,6 +1,6 @@
 # render-engine
 
-This is a 3D rendering engine for the Rust programming language based on an existing Rust Vulkan library (Vulkano). It is relatively complete, but not actively maintained because I have abandoned it to switch to Ash from Vulkano.
+This is a 3D rendering engine for the Rust programming language based on an existing Rust Vulkan library (Vulkano). It is mostly complete, but not actively maintained because I have abandoned it to switch to Ash from Vulkano.
 
 ## Screenshots & Videos
 <a href="http://www.youtube.com/watch?feature=player_embedded&v=UrnSCpf_yw0" target="_blank"><img src="http://img.youtube.com/vi/UrnSCpf_yw0/0.jpg" alt="WIP Rust Rendering Engine" width="800" height="600" border="10" /></a>
