@@ -5,6 +5,8 @@ This is a 3D rendering engine for the Rust programming language based on an exis
 ## Screenshots & Videos
 [Youtube video demonstrating what's possible with this library](https://www.youtube.com/watch?v=UrnSCpf_yw0)
 
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=UrnSCpf_yw0" target="_blank"><img src="http://img.youtube.com/vi/UrnSCpf_yw0/0.jpg" alt="IMAGE ALT TEXT HERE" width="240" height="180" border="10" /></a>
+
 ![](https://raw.githubusercontent.com/cynic64/tests-render-engine/master/screenshots/lighting.png)
 Lighting demo using Blinn-Phong shading with ambient, diffuse, specular and normal maps
 
