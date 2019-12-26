@@ -34,3 +34,5 @@ pub type Buffer = Arc<dyn vulkano::buffer::BufferAccess + Send + Sync>;
 pub type Image = Arc<dyn vulkano::image::ImageViewAccess + Send + Sync>;
 pub type Set = Arc<dyn vulkano::descriptor::descriptor_set::DescriptorSet + Send + Sync>;
 pub use vulkano::format::Format;
+
+pub use vulkano::impl_vertex;

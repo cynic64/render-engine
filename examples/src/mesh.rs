@@ -8,6 +8,7 @@ use render_engine::mesh::{Mesh, PrimitiveTopology, Vertex};
 use render_engine::utils::load_texture;
 use render_engine::{Format, Queue, Image, RenderPass};
 use render_engine::object::{ObjectPrototype, Object};
+use render_engine::impl_vertex;
 
 use crate::relative_path;
 
@@ -340,20 +341,20 @@ pub fn only_pos(mesh: &Mesh<VPosTexNorm>) -> Mesh<VPos> {
 pub struct VPos {
     pub position: [f32; 3],
 }
-vulkano::impl_vertex!(VPos, position);
+impl_vertex!(VPos, position);
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct VPos2D {
     pub position: [f32; 2],
 }
-vulkano::impl_vertex!(VPos2D, position);
+impl_vertex!(VPos2D, position);
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct VPosColor2D {
     pub position: [f32; 2],
     pub color: [f32; 3],
 }
-vulkano::impl_vertex!(VPosColor2D, position, color);
+impl_vertex!(VPosColor2D, position, color);
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct VPosTexNorm {
@@ -361,7 +362,7 @@ pub struct VPosTexNorm {
     pub tex_coord: [f32; 2],
     pub normal: [f32; 3],
 }
-vulkano::impl_vertex!(VPosTexNorm, position, tex_coord, normal);
+impl_vertex!(VPosTexNorm, position, tex_coord, normal);
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct VPosTexNormTan {
@@ -370,4 +371,4 @@ pub struct VPosTexNormTan {
     pub normal: [f32; 3],
     pub tangent: [f32; 3],
 }
-vulkano::impl_vertex!(VPosTexNormTan, position, tex_coord, normal, tangent);
+impl_vertex!(VPosTexNormTan, position, tex_coord, normal, tangent);
