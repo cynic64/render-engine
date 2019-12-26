@@ -39,10 +39,10 @@ As for the examples, the most interesting are `triangle`, which is the usual mul
 ## What's the point?
 There are not yet any high-level rendering libraries for Rust, and especially not for Vulkan. The intent of this project was to fill that gap, and although I am abandoning it I still hope to eventually achieve what I wanted to with a new library built using lower-level Vulkan bindings (Ash). It was still a lot of fun and I learned a lot, so no regrets.
 
-Although it's not feature-complete, it has fulfilled its purpose of being higher-level than existing rust libraries. The [triangle example](https://github.com/cynic64/tests-render-engine/blob/master/src/bin/triangle.rs) is 103 lines including whitespace, compared to [474](https://github.com/vulkano-rs/vulkano-examples/blob/master/src/bin/triangle.rs) for Vulkano and [1186](https://github.com/SaschaWillems/Vulkan/blob/master/examples/triangle/triangle.cpp) for Vulkan in C++. Lines of code is not a great metric, but the difference is clear anyway.
+Although it's not feature-complete, it has fulfilled its purpose of being higher-level than existing rust libraries. The [triangle example](https://github.com/cynic64/render-engine/blob/master/examples/src/bin/triangle.rs) is 103 lines including whitespace, compared to [474](https://github.com/vulkano-rs/vulkano-examples/blob/master/src/bin/triangle.rs) for Vulkano and [1186](https://github.com/SaschaWillems/Vulkan/blob/master/examples/triangle/triangle.cpp) for Vulkan in C++. Lines of code is not a great metric, but the difference is clear anyway.
 
 ## Is it useable?
-Yes! See the [examples repository](https://github.com/cynic64/tests-render-engine) and the previous youtube video for a demo of what can be done. Render-engine supports:
+Yes! See the examples directory and the previous youtube video for a demo of what can be done. Render-engine supports:
   - User-defined vertex types and polygon fill modes
   - Multiple passes
   - Multisampled anti-aliasing
@@ -50,7 +50,7 @@ Yes! See the [examples repository](https://github.com/cynic64/tests-render-engin
   - Uniforms, both textures and pure data
   - All image formats supported by Vulkan
 
-It also includes a custom input handling library for things like mouse movement and keypresses to make life easier (it's a layer on top of winit).
+It also includes a custom input handling library for things like mouse movement and keypresses (it's a layer on top of winit).
 That said, it's very unfinished and definitely not to be used for anything more than hobby projects. Performance is a bit worse than it should be compared to raw Vulkan and some basic features like mipmaps aren't supported.
 
 ## Documentation
