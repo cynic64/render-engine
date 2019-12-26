@@ -15,13 +15,26 @@ Simple mesh loading demo using normals to shade the surface
 Minimalist example showing the use of multiple passes: first a triangle is drawn, then another fragment shader is used to desaturate it.
 
 ## Use
-Render-engine isn't on crates.io and depends on a set of [low-level Vulkano helpers](https://github.com/cynic64/re-ll), so you'll have to clone the files rather than pointing Cargo to the github repo and reference them in your Cargo.toml like this:
+Render-engine isn't on crates.io, but you can still include it in your `Cargo.toml` through git:
+
 ```toml
 [dependencies]
-render-engine = { path = "../render-engine/" }
+render-engine = { git = "https://github.com/cynic64/render-engine" }
 ```
 
-Render-engine requires re-ll, the set of low-level helpers, to be in the same directory as it as well as named `re-ll`. Eventually I will combine this repository, the helpers and the examples into one repository to make this process less painful.
+To make sure the version stays consistent, including a revision is a good idea:
+
+```toml
+[dependencies]
+render-engine = { git = "https://github.com/cynic64/render-engine", rev = "cf4f0804" }
+```
+
+## Repository structure
+This repo is a workspace with 3 sub-crates: render-engine, re-ll and some examples of its use.
+
+re-ll is a set of low-level helpers for interacting with Vulkano, render-engine is the actual rendering library.
+
+As for the examples, the most interesting are `triangle`, which is the usual mulitcolored triangle demo, `base`, which loads a 3d model and includes an orbiting camera, and `pretty`, which is the most advanced and the one shown in the youtube video.
 
 ## What's the point?
 There are not yet any high-level rendering libraries for Rust, and especially not for Vulkan. The intent of this project was to fill that gap, and although I am abandoning it I still hope to eventually achieve what I wanted to with a new library built using lower-level Vulkan bindings (Ash). It was still a lot of fun and I learned a lot, so no regrets.
